@@ -1,6 +1,7 @@
 import psycopg
 import pytest
 
+from app import limits
 from app.config import settings
 from pipeline.load_db import apply_schema
 
@@ -29,5 +30,11 @@ def test_database_url():
 def empty_catalog(test_database_url, monkeypatch):
     monkeypatch.setattr(settings, "database_url", test_database_url)
     with psycopg.connect(test_database_url) as conn:
-        conn.execute("TRUNCATE films, genome_tags, ranker")
+        conn.execute("TRUNCATE films, genome_tags, ranker, daily_spend")
     return test_database_url
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Every test starts with no requests counted, whatever earlier tests sent."""
+    limits.limiter.clear()

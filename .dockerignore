@@ -1,0 +1,13 @@
+# Keep the build context small: the datasets alone are several gigabytes.
+.git
+.env
+data/
+results/
+backend/tests/
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache

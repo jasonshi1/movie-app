@@ -10,7 +10,7 @@ type Pick = {
   reason: { similar_to: string; themes: string[] };
 };
 
-type PickStatus = "idle" | "picking" | "none-left" | "error";
+type PickStatus = "idle" | "picking" | "none-left" | "too-fast" | "error";
 
 const SEARCH_DELAY_MS = 200;
 
@@ -92,6 +92,10 @@ export default function App() {
         setStatus("none-left");
         return;
       }
+      if (response.status === 429) {
+        setStatus("too-fast");
+        return;
+      }
       if (!response.ok) throw new Error(`Pick failed with ${response.status}`);
       setPick((await response.json()) as Pick);
       setStatus("idle");
@@ -167,6 +171,9 @@ export default function App() {
 
       {status === "none-left" && <p role="status">There are no more films to suggest.</p>}
       {status === "error" && <p role="alert">Something went wrong. Please try again.</p>}
+      {status === "too-fast" && (
+        <p role="alert">You're going a bit fast. Try again in a moment.</p>
+      )}
 
       {pick && (
         <article className="pick" aria-label="Your pick">

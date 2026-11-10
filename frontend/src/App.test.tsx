@@ -117,6 +117,18 @@ it("shows an error when picking fails", async () => {
   expect(await screen.findByRole("alert")).toBeTruthy();
 });
 
+it("asks people to slow down when the server limits requests", async () => {
+  stubApi([{ status: 429, body: { detail: "You're going a bit fast." } }]);
+  render(<App />);
+  await addMatrixAsFavourite();
+
+  fireEvent.click(pickButton());
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "You're going a bit fast. Try again in a moment.",
+  );
+});
+
 it("removes a favourite", async () => {
   stubApi([]);
   render(<App />);

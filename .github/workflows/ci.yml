@@ -56,6 +56,13 @@ jobs:
         run: curl -fsS http://localhost:8000/api/health
       - name: Frontend reaches the backend through its proxy
         run: curl -fsS http://localhost:5173/api/health
+      - name: The production image serves the built app
+        run: curl -fsS http://localhost:8000/ | grep -q "<title>Tonight's Pick</title>"
+      - name: The MCP endpoint lists its tools
+        run: |
+          curl -fsS -X POST http://localhost:8000/mcp \
+            -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | grep -q '"pick_film"'
       - name: Show logs on failure
         if: failure()
         run: docker compose logs

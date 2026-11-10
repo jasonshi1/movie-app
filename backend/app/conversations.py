@@ -64,3 +64,12 @@ def save(conversation: Conversation) -> bool:
     if saved:
         conversation.version += 1
     return bool(saved)
+
+
+def delete_older_than(days: int) -> int:
+    """Delete conversations nobody has continued for this many days. Returns how many."""
+    with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
+        return conn.execute(
+            "DELETE FROM conversations WHERE updated_at < now() - make_interval(days => %s)",
+            (days,),
+        ).rowcount
