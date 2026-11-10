@@ -14,6 +14,12 @@ from app.config import settings
 POPULARITY_WEIGHT = 1.0
 THEME_COUNT = 3
 
+# The columns film_card() reads, in order, from a query that aliases films as "film".
+FILM_CARD_COLUMNS = (
+    "film.movie_id, film.title, film.year, film.genres, film.directors, film.runtime,"
+    " film.certification, film.wikipedia_title"
+)
+
 _SEARCH = """
 SELECT movie_id, title, year, directors
 FROM films
@@ -24,10 +30,9 @@ ORDER BY title ILIKE %(prefix)s DESC,
 LIMIT %(limit)s
 """
 
-_PICK = """
+_PICK = f"""
 WITH taste AS (SELECT avg(genome) AS vector FROM films WHERE movie_id = ANY(%(liked)s))
-SELECT film.movie_id, film.title, film.year, film.genres, film.directors, film.runtime,
-       film.certification, film.wikipedia_title, film.genome::text, taste.vector::text
+SELECT {FILM_CARD_COLUMNS}, film.genome::text, taste.vector::text
 FROM films AS film, taste
 WHERE taste.vector IS NOT NULL AND film.movie_id <> ALL(%(excluded)s)
 ORDER BY (1 - (film.genome <=> taste.vector)) + %(weight)s * film.popularity DESC, film.movie_id
@@ -70,6 +75,26 @@ def shared_themes(taste: list[float], film: list[float], tags: list[tuple[int, s
     return [name for _, name in ranked[:THEME_COUNT]]
 
 
+def film_card(row: tuple) -> dict:
+    """Describe a film for display, from a row starting with FILM_CARD_COLUMNS."""
+    movie_id, title, year, genres, directors, runtime, certification, wikipedia_title = row[:8]
+    return {
+        "movie_id": movie_id,
+        "title": title,
+        "year": year,
+        "genres": genres,
+        "directors": directors,
+        "runtime": runtime,
+        "certification": certification,
+        "wikipedia_url": (
+            f"https://en.wikipedia.org/wiki/{quote(wikipedia_title.replace(' ', '_'))}"
+            if wikipedia_title
+            else None
+        ),
+        "where_to_watch_url": f"https://www.justwatch.com/ca/search?q={quote(title)}",
+    }
+
+
 def pick_film(liked: list[int], rejected: list[int]) -> dict | None:
     """Return the best film the person hasn't named or rejected, or None if there isn't one."""
     with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
@@ -86,23 +111,8 @@ def pick_film(liked: list[int], rejected: list[int]) -> dict | None:
         ).fetchone()[0]
         tags = conn.execute(_DISPLAYABLE_TAGS).fetchall()
 
-    movie_id, title, year, genres, directors, runtime, certification, wikipedia_title = row[:8]
     return {
-        "film": {
-            "movie_id": movie_id,
-            "title": title,
-            "year": year,
-            "genres": genres,
-            "directors": directors,
-            "runtime": runtime,
-            "certification": certification,
-            "wikipedia_url": (
-                f"https://en.wikipedia.org/wiki/{quote(wikipedia_title.replace(' ', '_'))}"
-                if wikipedia_title
-                else None
-            ),
-            "where_to_watch_url": f"https://www.justwatch.com/ca/search?q={quote(title)}",
-        },
+        "film": film_card(row),
         "reason": {
             "similar_to": similar_to,
             "themes": shared_themes(json.loads(row[9]), json.loads(film_vector), tags),

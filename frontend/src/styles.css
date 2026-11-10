@@ -194,3 +194,65 @@ footer {
   margin-top: 3rem;
   font-size: 0.8rem;
 }
+
+.chat {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.transcript .person {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.transcript .claude .pick {
+  margin-top: 0;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.proposal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+
+.proposal p {
+  margin: 0 0.5rem 0 0;
+}
+
+.proposal button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+}
+
+.chat .primary {
+  margin-top: 0;
+}

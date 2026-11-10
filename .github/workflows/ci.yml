@@ -56,3 +56,21 @@ jobs:
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
+
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: No commit credits Claude as an author or co-author
+        run: |
+          status=0
+          for sha in $(git rev-list HEAD); do
+            if git show -s --format='%an <%ae>%n%cn <%ce>%n%B' "$sha" \
+                | grep -qiE '^[[:space:]]*co-authored-by:.*(claude|anthropic)|@anthropic\.com'; then
+              echo "::error::$(git show -s --format='%h %s' "$sha") credits Claude. Remove the Co-Authored-By line and push again."
+              status=1
+            fi
+          done
+          exit $status

@@ -2,7 +2,7 @@
 
 A movie picker for one person. Name a few films you love and get one film to watch tonight, with the reason it was chosen. Say "not that one" and it tries again.
 
-This project is in development. The current version recommends without an LLM. A Claude conversation comes next.
+This project is in development. Quick picks work without an LLM. A conversation with Claude is built and switches on when the server has an Anthropic API key. It hasn't been evaluated against the real model yet.
 
 ## Run it
 
@@ -24,6 +24,31 @@ py -3.13 -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev,pipeline]"
 .venv/Scripts/python -m pipeline.build
 ```
+
+## Chat with Claude
+
+To switch the conversation on, copy `.env.example` to `.env`, add your key after `ANTHROPIC_API_KEY=`, and restart with `docker compose up --build`. Set a spending limit on the key in the Anthropic Console first. Without a key, the page says chat isn't set up and quick picks keep working.
+
+How it works:
+
+- You describe what you want, and Claude (Claude Opus 5.5, low effort) searches the catalog with tools. Hard limits such as runtime, years, genres, age ratings, films you've seen and films you've turned down are enforced in SQL, so Claude can only choose from films that already meet them.
+- Claude can only show a film that its search returned, and only one per turn. Your favourites can never be picked.
+- Text from Wikipedia reaches Claude only as tool results, which it is told to treat as facts about films, never as instructions.
+- If you keep turning films down for the same reason, Claude can suggest saving a preference. Nothing is saved unless you accept, and saved preferences stay in your browser, where you can remove them.
+- Each conversation's full history is stored and replayed to Claude unchanged, which Claude Opus 5.5 needs to keep its reasoning valid between turns. Safety-classifier declines are retried on a fallback model.
+- The cost of every turn is logged.
+
+### Evaluating it
+
+`pipeline/conversation_cases.py` holds 75 written requests, each with the limits its pick must meet. The runner sends them to Claude and checks every pick against the database. It spends API credit, so it only starts with `--yes`. Try a few cases first:
+
+```bash
+.venv/Scripts/python -m pipeline.evaluate_conversation --limit 5 --yes
+```
+
+Results go to `results/stage2_conversation.md`.
+
+The weight given to the described mood was measured offline: see [results/stage2_mood_weight.md](results/stage2_mood_weight.md).
 
 ## How picks are chosen
 
@@ -84,7 +109,7 @@ GroupLens and the University of Minnesota do not endorse this project.
 
 - [x] Stage 0: Foundation
 - [x] Stage 1: Catalog and baseline recommendations, no LLM
-- [ ] Stage 2: Claude conversation
+- [ ] Stage 2: Claude conversation (built and tested with a stand-in for Claude; waiting on a real evaluation)
 - [ ] Stage 3: PyTorch ranking model
 - [ ] Stage 4: Simulated-user evaluation
 - [ ] Stage 5: Public launch

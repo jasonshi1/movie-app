@@ -1,23 +1,9 @@
 import { useEffect, useState } from "react";
 
-type FilmMatch = {
-  movie_id: number;
-  title: string;
-  year: number | null;
-  directors: string[];
-};
-
-type PickedFilm = {
-  movie_id: number;
-  title: string;
-  year: number | null;
-  genres: string[];
-  directors: string[];
-  runtime: number | null;
-  certification: string | null;
-  wikipedia_url: string | null;
-  where_to_watch_url: string;
-};
+import Chat from "./Chat";
+import { details, withYear } from "./format";
+import { loadFavourites, loadPreferences, saveFavourites, savePreferences } from "./storage";
+import type { FilmMatch, PickedFilm, Preferences } from "./types";
 
 type Pick = {
   film: PickedFilm;
@@ -28,28 +14,32 @@ type PickStatus = "idle" | "picking" | "none-left" | "error";
 
 const SEARCH_DELAY_MS = 200;
 
-function withYear(film: { title: string; year: number | null }): string {
-  return film.year ? `${film.title} (${film.year})` : film.title;
-}
-
-function details(film: PickedFilm): string {
-  return [
-    film.runtime ? `${film.runtime} min` : null,
-    film.certification,
-    film.directors.length ? `Directed by ${film.directors.join(", ")}` : null,
-    film.genres.join(", ") || null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 export default function App() {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<FilmMatch[]>([]);
-  const [favourites, setFavourites] = useState<FilmMatch[]>([]);
+  const [favourites, setFavourites] = useState<FilmMatch[]>(loadFavourites);
+  const [preferences, setPreferences] = useState<Preferences>(loadPreferences);
   const [rejected, setRejected] = useState<number[]>([]);
   const [pick, setPick] = useState<Pick | null>(null);
   const [status, setStatus] = useState<PickStatus>("idle");
+  const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => saveFavourites(favourites), [favourites]);
+  useEffect(() => savePreferences(preferences), [preferences]);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((response) => (response.ok ? (response.json() as Promise<{ conversation: boolean }>) : null))
+      .then((config) => setChatAvailable(config?.conversation ?? false))
+      .catch(() => setChatAvailable(false));
+  }, []);
+
+  function removeAvoidedGenre(genre: string) {
+    setPreferences((current) => ({
+      ...current,
+      avoid_genres: current.avoid_genres.filter((avoided) => avoided !== genre),
+    }));
+  }
 
   useEffect(() => {
     const term = query.trim();
@@ -200,6 +190,45 @@ export default function App() {
             )}
           </div>
         </article>
+      )}
+
+      {(preferences.avoid_genres.length > 0 || preferences.max_runtime) && (
+        <ul className="favourites" aria-label="Saved preferences">
+          {preferences.avoid_genres.map((genre) => (
+            <li key={genre}>
+              No {genre}
+              <button
+                type="button"
+                aria-label={`Stop avoiding ${genre}`}
+                onClick={() => removeAvoidedGenre(genre)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {preferences.max_runtime && (
+            <li>
+              Up to {preferences.max_runtime} min
+              <button
+                type="button"
+                aria-label="Remove the runtime limit"
+                onClick={() => setPreferences((current) => ({ ...current, max_runtime: null }))}
+              >
+                ×
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+
+      {chatAvailable && (
+        <Chat favourites={favourites} preferences={preferences} onPreferencesChange={setPreferences} />
+      )}
+      {chatAvailable === false && (
+        <p className="details" role="note">
+          Chat with Claude isn't set up on this server yet. You can still pick from your favourites
+          above.
+        </p>
       )}
 
       <footer>

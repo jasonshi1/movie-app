@@ -6,9 +6,9 @@ import numpy as np
 import polars as pl
 from fastembed import TextEmbedding
 
+from app.embedding import MODEL_NAME
 from pipeline.catalog import DATA_DIR, PROCESSED_DIR
 
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
 MODEL_DIR = DATA_DIR / "models"
 BATCH_SIZE = 64
 TOP_TAGS = 15
