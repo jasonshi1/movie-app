@@ -14,6 +14,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
+from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -116,9 +117,8 @@ class RateLimited:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
             client = scope.get("client")
-            wait = limits.limiter.wait_seconds(
-                "requests", client[0] if client else "unknown", limits.request_limit()
-            )
+            address = limits.visitor_address(Headers(scope=scope), client[0] if client else None)
+            wait = limits.limiter.wait_seconds("requests", address, limits.request_limit())
             if wait > 0:
                 response = JSONResponse(
                     {"detail": "You're going a bit fast. Try again in a moment."},

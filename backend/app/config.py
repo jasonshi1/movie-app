@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Per visitor, counted by IP address in memory, so nothing about visitors is stored.
     chat_messages_per_hour: int = 30
     requests_per_minute: int = 120
+    # Behind a hosting proxy, the header that proxy sets to the visitor's address and that
+    # visitors can't forge, such as Fly-Client-IP on Fly.io. Don't use X-Forwarded-For:
+    # visitors can add their own entries to it. Empty means use the connection's address.
+    client_ip_header: str = ""
     # Conversations older than this are deleted when the server starts.
     conversation_retention_days: int = 30
     # The public host names the app is served on, comma-separated, such as

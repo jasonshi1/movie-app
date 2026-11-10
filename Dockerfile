@@ -23,6 +23,6 @@ RUN useradd --create-home appuser && chown -R appuser /srv/models
 USER appuser
 
 EXPOSE 8000
-# Hosting platforms set PORT. Behind their proxy, also set FORWARDED_ALLOW_IPS so the rate
-# limits see each visitor's address instead of the proxy's.
+# Hosting platforms set PORT. Behind their proxy, also set CLIENT_IP_HEADER so the rate limits
+# see each visitor's address instead of the proxy's.
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

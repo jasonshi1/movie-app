@@ -57,9 +57,7 @@ MAX_USER_TURNS = 20
 
 
 def visitor(request: Request) -> str:
-    """The visitor's IP address. Behind a proxy, uvicorn fills it in from X-Forwarded-For
-    when FORWARDED_ALLOW_IPS trusts that proxy."""
-    return request.client.host if request.client else "unknown"
+    return limits.visitor_address(request.headers, request.client.host if request.client else None)
 
 
 def rate_limited(bucket: str, limit: Callable[[], limits.Limit]) -> Callable[[Request], None]:

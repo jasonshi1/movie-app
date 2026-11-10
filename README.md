@@ -159,10 +159,49 @@ The image built from the root `Dockerfile` serves the app, the API and the MCP s
    | `DATABASE_URL` | The hosted database |
    | `ANTHROPIC_API_KEY` | Your key, kept on the server. Set a spending limit on it in the Anthropic Console |
    | `PUBLIC_HOSTS` | The app's host name, such as `tonights-pick.example.com`. The MCP endpoint refuses other names |
-   | `FORWARDED_ALLOW_IPS` | `*` when only the host's proxy can reach the container, so rate limits see each visitor |
+   | `CLIENT_IP_HEADER` | The header your host's proxy sets to the visitor's address, such as `Fly-Client-IP`, so rate limits see each visitor. Never `X-Forwarded-For`, which visitors can add to |
    | `DAILY_SPEND_LIMIT_USD` | Optional, $5 by default |
 
    The server listens on `PORT`, which most hosts set, or 8000.
+
+### Launch on Fly.io and Neon
+
+`fly.toml` runs one always-on machine with 1 GB of memory in Toronto, so the link opens without waiting for the model to load. Neon hosts the database. You create both accounts and add any payment method yourself. Run these commands in your own terminal, and never paste keys into a chat.
+
+1. In Neon, create a project in a region near Toronto, such as AWS US East. Copy its connection string with connection pooling turned off.
+2. Load the catalog into it, from `backend`:
+
+   ```bash
+   DATABASE_URL="<Neon connection string>" .venv/Scripts/python -m pipeline.load_db
+   ```
+
+3. Install [flyctl](https://fly.io/docs/flyctl/install/) and sign in with `fly auth login`.
+4. Create the app. App names are global, so if `tonights-pick` is taken, choose another and change it in `fly.toml`, in both `app` and `PUBLIC_HOSTS`:
+
+   ```bash
+   fly apps create tonights-pick
+   ```
+
+5. Store the secrets on Fly.io:
+
+   ```bash
+   fly secrets set DATABASE_URL="<Neon connection string>" ANTHROPIC_API_KEY="<your key>"
+   ```
+
+6. Deploy from the project root. The first build takes a few minutes:
+
+   ```bash
+   fly deploy
+   ```
+
+7. Open https://tonights-pick.fly.dev and try a quick pick and a chat. The MCP server is at https://tonights-pick.fly.dev/mcp.
+8. Check that visitors can't get around the rate limits by claiming another address. This sends 125 searches, each claiming a different one. A few should come back `429`, because Fly.io replaces the header with your real address:
+
+   ```bash
+   for i in $(seq 1 125); do curl -s -o /dev/null -w "%{http_code}\n" -H "Fly-Client-IP: 203.0.113.$i" "https://tonights-pick.fly.dev/api/films/search?q=matrix"; done | sort | uniq -c
+   ```
+
+   If all 125 come back `200`, visitors can forge the header. Remove `CLIENT_IP_HEADER` from `fly.toml` and redeploy. Every visitor then shares one set of limits, which is safe but strict, while you look for another way to identify visitors.
 
 ### Privacy
 
