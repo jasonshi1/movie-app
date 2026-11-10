@@ -17,7 +17,7 @@ jobs:
         run: docker compose up -d --wait db
       - name: Install
         working-directory: backend
-        run: pip install ".[dev]"
+        run: pip install ".[dev,pipeline]"
       - name: Lint
         working-directory: backend
         run: ruff check .
