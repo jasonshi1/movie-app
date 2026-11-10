@@ -17,7 +17,10 @@ INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
 
 def apply_schema(conn: psycopg.Connection) -> None:
     """Run the init scripts, which Docker only applies when a database is first created."""
-    for script in sorted(INIT_DIR.glob("*.sql")):
+    scripts = sorted(INIT_DIR.glob("*.sql"))
+    if not scripts:
+        raise FileNotFoundError(f"No schema scripts in {INIT_DIR}")
+    for script in scripts:
         conn.execute(script.read_text(encoding="utf-8"))
 
 
