@@ -2,76 +2,20 @@ import numpy as np
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from support import GENOME_SIZE, insert_film, load_sample_catalog
 
 from app import main
 from app.recommend import POPULARITY_WEIGHT, shared_themes
 from pipeline.embed import normalize
 from pipeline.evaluate import similarity_scorer
-from pipeline.load_db import vector_literal
 from pipeline.tag_policy import is_displayable
 
 client = TestClient(main.app)
-GENOME_SIZE = 1084
-EMBEDDING = vector_literal(np.eye(384, dtype=np.float32)[0])
-
-
-def insert_film(conn, movie_id, title, genome, popularity=0.0, **extra):
-    conn.execute(
-        "INSERT INTO films (movie_id, imdb_id, title, year, genres, directors, cast_members,"
-        " runtime, certification, wikipedia_title, popularity, genome, embedding)"
-        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (
-            movie_id,
-            f"{movie_id:07d}",
-            title,
-            extra.get("year", 2000),
-            extra.get("genres", ["Drama"]),
-            extra.get("directors", ["A Director"]),
-            [],
-            extra.get("runtime", 100),
-            extra.get("certification"),
-            extra.get("wikipedia_title"),
-            popularity,
-            vector_literal(genome),
-            EMBEDDING,
-        ),
-    )
-
-
-def tagged(**weights) -> np.ndarray:
-    """Build a normalized genome vector from tag positions written as t0=1.0, t5=0.5."""
-    vector = np.zeros(GENOME_SIZE, dtype=np.float32)
-    for name, weight in weights.items():
-        vector[int(name[1:])] = weight
-    return vector / np.linalg.norm(vector)
 
 
 @pytest.fixture
 def catalog(empty_catalog):
-    with psycopg.connect(empty_catalog) as conn:
-        conn.cursor().executemany(
-            "INSERT INTO genome_tags (position, tag, displayable) VALUES (%s, %s, %s)",
-            [
-                (0, "dystopia", True),
-                (1, "cyberpunk", True),
-                (2, "twist ending", False),
-                (3, "romance", True),
-            ],
-        )
-        insert_film(conn, 1, "The Matrix", tagged(t0=1.0, t1=1.0, t2=1.0))
-        insert_film(
-            conn,
-            2,
-            "Blade Runner",
-            tagged(t0=1.0, t1=0.9, t2=1.0),
-            popularity=0.2,
-            wikipedia_title="Blade Runner",
-            year=1982,
-            runtime=117,
-            certification="R",
-        )
-        insert_film(conn, 3, "Notting Hill", tagged(t3=1.0), popularity=0.3)
-        insert_film(conn, 4, "100% Wolf", tagged(t3=1.0))
+    load_sample_catalog(empty_catalog)
     return empty_catalog
 
 

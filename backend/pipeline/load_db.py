@@ -47,7 +47,7 @@ def main() -> None:
             )
             with cursor.copy(
                 "COPY films (movie_id, imdb_id, title, year, genres, directors, cast_members,"
-                " runtime, certification, wikipedia_title, popularity, genome, embedding)"
+                " runtime, certification, wikipedia_title, description, popularity, genome, embedding)"
                 " FROM STDIN"
             ) as copy:
                 for index, row in enumerate(films.iter_rows(named=True)):
@@ -63,6 +63,7 @@ def main() -> None:
                             row["runtime"],
                             row["certification"],
                             row["wikipedia_title"],
+                            row["description"],
                             float(popularity[index]),
                             vector_literal(genome[index]),
                             vector_literal(embeddings[index]),
