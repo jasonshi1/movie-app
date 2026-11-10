@@ -23,6 +23,8 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql://movie_app:${POSTGRES_PASSWORD:-movie_app_dev}@db:5432/movie_app
+      # Read from .env. Leave it unset to run without the Claude conversation.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

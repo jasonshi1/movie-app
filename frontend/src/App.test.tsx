@@ -6,6 +6,7 @@ import App from "./App";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 const MATRIX = { movie_id: 1, title: "The Matrix", year: 1999, directors: ["The Wachowskis"] };
@@ -29,7 +30,7 @@ function pickOf(movieId: number, title: string) {
 
 type Reply = { status: number; body: unknown };
 
-function stubApi(pickReplies: Reply[]) {
+function stubApi(pickReplies: Reply[], chat = false) {
   const pickBodies: { liked: number[]; rejected: number[] }[] = [];
   const replies = [...pickReplies];
   vi.stubGlobal(
@@ -37,7 +38,9 @@ function stubApi(pickReplies: Reply[]) {
     vi.fn((url: string, init?: RequestInit) => {
       const reply = url.startsWith("/api/films/search")
         ? { status: 200, body: [MATRIX] }
-        : replies.shift()!;
+        : url === "/api/config"
+          ? { status: 200, body: { conversation: chat } }
+          : replies.shift()!;
       if (init?.method === "POST") pickBodies.push(JSON.parse(init.body as string));
       return Promise.resolve({
         ok: reply.status < 400,
@@ -122,4 +125,35 @@ it("removes a favourite", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Remove The Matrix" }));
 
   await waitFor(() => expect(pickButton()).toHaveProperty("disabled", true));
+});
+
+it("explains when chat with Claude isn't set up", async () => {
+  stubApi([]);
+
+  render(<App />);
+
+  expect(await screen.findByRole("note")).toHaveProperty(
+    "textContent",
+    expect.stringContaining("isn't set up on this server"),
+  );
+  expect(screen.queryByRole("region", { name: "Chat with Claude" })).toBeNull();
+});
+
+it("shows the chat when the server has Claude set up", async () => {
+  stubApi([], true);
+
+  render(<App />);
+
+  expect(await screen.findByRole("region", { name: "Chat with Claude" })).toBeTruthy();
+});
+
+it("remembers favourites after a reload", async () => {
+  stubApi([]);
+  render(<App />);
+  await addMatrixAsFavourite();
+  cleanup();
+
+  render(<App />);
+
+  expect(screen.getByRole("button", { name: "Remove The Matrix" })).toBeTruthy();
 });
