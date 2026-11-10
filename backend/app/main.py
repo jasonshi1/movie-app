@@ -1,23 +1,82 @@
 import logging
+import math
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
 import anthropic
 import psycopg
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import assistant, conversations
+from app import assistant, conversations, limits, mcp_server
 from app.catalog_tools import GENRES, film_cards
 from app.config import settings
 from app.db import vector_extension_version
 from app.recommend import pick_film, search_films
 
 logging.basicConfig(level=logging.INFO)
-app = FastAPI(title="Tonight's Pick API", version="0.1.0")
+logger = logging.getLogger(__name__)
+
+# The app only loads its own files and calls its own API.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; "
+    "form-action 'self'"
+)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        deleted = conversations.delete_older_than(settings.conversation_retention_days)
+        logger.info("Deleted %d conversations older than %d days", deleted,
+                    settings.conversation_retention_days)
+    except psycopg.OperationalError:
+        logger.warning("Couldn't delete old conversations: the database isn't available.")
+    async with mcp_server.endpoint.running():
+        yield
+
+
+app = FastAPI(title="Tonight's Pick API", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next: Callable) -> Response:
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    return response
 
 MAX_USER_TURNS = 20
+
+
+def visitor(request: Request) -> str:
+    """The visitor's IP address. Behind a proxy, uvicorn fills it in from X-Forwarded-For
+    when FORWARDED_ALLOW_IPS trusts that proxy."""
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limited(bucket: str, limit: Callable[[], limits.Limit]) -> Callable[[Request], None]:
+    def check(request: Request) -> None:
+        wait = limits.limiter.wait_seconds(bucket, visitor(request), limit())
+        if wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="You're going a bit fast. Try again in a moment.",
+                headers={"Retry-After": str(math.ceil(wait))},
+            )
+
+    return check
+
+
+per_minute = Depends(rate_limited("requests", limits.request_limit))
+per_hour_of_chat = Depends(rate_limited("chat", limits.chat_limit))
 
 
 class FilmMatch(BaseModel):
@@ -108,7 +167,7 @@ def health(response: Response) -> dict[str, str | bool | None]:
     return {"status": "ok", "database": True, "pgvector": pgvector}
 
 
-@app.get("/api/films/search")
+@app.get("/api/films/search", dependencies=[per_minute])
 def search(
     q: Annotated[str, Query(max_length=100)],
     limit: Annotated[int, Query(ge=1, le=20)] = 8,
@@ -116,7 +175,7 @@ def search(
     return search_films(q, limit)
 
 
-@app.post("/api/pick")
+@app.post("/api/pick", dependencies=[per_minute])
 def pick(request: PickRequest) -> PickResponse:
     result = pick_film(request.liked, request.rejected)
     if result is None:
@@ -175,10 +234,15 @@ def compose_message(conversation: conversations.Conversation, request: ChatReque
     return "\n\n".join(lines)
 
 
-@app.post("/api/chat")
+@app.post("/api/chat", dependencies=[per_hour_of_chat])
 def chat(request: ChatRequest) -> ChatResponse:
     if settings.anthropic_api_key is None:
         raise HTTPException(status_code=503, detail="Chat with Claude isn't set up on this server.")
+    if not limits.budget_left():
+        raise HTTPException(
+            status_code=503,
+            detail="Chat has used today's budget and is back at midnight UTC. Quick picks still work.",
+        )
 
     if request.conversation_id is None:
         conversation = conversations.Conversation()
@@ -190,6 +254,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=409, detail="This conversation is full. Start a new one.")
 
     user_text = compose_message(conversation, request)
+    cost_before = conversation.state["cost_usd"]
     try:
         outcome = assistant.run_turn(
             conversation, user_text, create=assistant.claude_create, embed=assistant.embed_query
@@ -200,6 +265,9 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=429, detail="Claude is busy. Try again in a minute.") from error
     except (anthropic.APIStatusError, anthropic.APIConnectionError) as error:
         raise HTTPException(status_code=502, detail="Claude couldn't be reached. Try again.") from error
+    finally:
+        # Every finished API call is counted, including those in a turn that later failed.
+        limits.record_spend(conversation.state["cost_usd"] - cost_before)
 
     if not conversations.save(conversation):
         raise HTTPException(
@@ -218,3 +286,31 @@ def chat(request: ChatRequest) -> ChatResponse:
         cost_usd=round(outcome.cost_usd, 6),
         conversation_cost_usd=round(conversation.state["cost_usd"], 6),
     )
+
+
+def serve_frontend(application: FastAPI, directory: Path) -> bool:
+    """Serve the built app from the same address as the API, if it has been built.
+
+    Mounted last, so the API and /mcp take precedence.
+    """
+    if not (directory / "index.html").is_file():
+        return False
+    application.mount("/", StaticFiles(directory=directory, html=True), name="frontend")
+    return True
+
+
+class McpWithoutSlash:
+    """Accept /mcp as well as /mcp/: clients are usually given the address without the slash."""
+
+    def __init__(self, application: ASGIApp):
+        self.app = application
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] == "/mcp":
+            scope = {**scope, "path": "/mcp/", "raw_path": b"/mcp/"}
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(McpWithoutSlash)
+app.mount("/mcp", mcp_server.endpoint)
+serve_frontend(app, Path(settings.static_dir))

@@ -12,8 +12,10 @@ You need Docker. From the project root:
 docker compose up --build
 ```
 
-- App: http://localhost:5173
+- App, with live reloading for development: http://localhost:5173
+- App as it runs when hosted, from the production image: http://localhost:8000
 - API health check: http://localhost:8000/api/health
+- MCP server: http://localhost:8000/mcp
 
 The catalog starts empty. To fill it, build the data once with Python 3.13. This downloads about 2.2 GB and takes around 20 minutes:
 
@@ -48,6 +50,8 @@ How it works:
 - If you keep turning films down for the same reason, Claude can suggest saving a preference. Nothing is saved unless you accept, and saved preferences stay in your browser, where you can remove them.
 - Each conversation's full history is stored and replayed to Claude unchanged, which Claude Opus 5.5 needs to keep its reasoning valid between turns. Safety-classifier declines are retried on a fallback model.
 - The cost of every turn is logged.
+- Chat pauses for the rest of the UTC day once Claude has cost `DAILY_SPEND_LIMIT_USD` ($5 by default). Quick picks keep working. A turn that's already running can go past the limit, so keep a spending limit on the key as well.
+- Each visitor can send 30 chat messages an hour and 120 other requests a minute. Visitors are counted by IP address in memory, so nothing about them is stored.
 
 ### Evaluating it
 
@@ -127,6 +131,43 @@ The same simulated users can talk to Claude, which reads each reason and searche
 
 Unrated films count as misses, so these rates understate how often people would be happy. Simulated users aren't real people, so treat the numbers as a simulation.
 
+## Use it from an AI assistant (MCP)
+
+The app is also an MCP server at `/mcp`, using streamable HTTP with no sign-in. Any assistant that supports remote MCP servers can use its tools:
+
+- `search_titles`: find films by title, allowing for typos, to get their IDs.
+- `pick_film`: one pick from a list of favourite IDs, with the reason, using the ranking model.
+- `find_films`: up to 8 films that meet limits on runtime, years, genres and age rating, ranked by fit with the favourites and a described mood.
+- `film_details`: a film's details, themes and a short Wikipedia description.
+
+The tools run the same code as the app and never call Claude, so they cost nothing to run. They share the per-minute rate limit.
+
+## Host it
+
+The image built from the root `Dockerfile` serves the app, the API and the MCP server on one port. To host it you need:
+
+1. **A PostgreSQL database with the pgvector extension.** Most managed PostgreSQL services offer it. The catalog takes about 100 MB. Load it from the machine where you built the data:
+
+   ```bash
+   DATABASE_URL=<hosted database URL> .venv/Scripts/python -m pipeline.load_db
+   ```
+
+2. **A container host** that runs the image with at least 1 GB of memory, for the embedding model. Set these environment variables:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | The hosted database |
+   | `ANTHROPIC_API_KEY` | Your key, kept on the server. Set a spending limit on it in the Anthropic Console |
+   | `PUBLIC_HOSTS` | The app's host name, such as `tonights-pick.example.com`. The MCP endpoint refuses other names |
+   | `FORWARDED_ALLOW_IPS` | `*` when only the host's proxy can reach the container, so rate limits see each visitor |
+   | `DAILY_SPEND_LIMIT_USD` | Optional, $5 by default |
+
+   The server listens on `PORT`, which most hosts set, or 8000.
+
+### Privacy
+
+There are no accounts, cookies or analytics. Favourites and saved preferences stay in the visitor's browser. Chat messages are sent to Anthropic to get Claude's replies, and each conversation is stored so it can continue. Conversations are deleted after 30 days without a new message. Rate limits count visitors by IP address in memory only.
+
 ## Develop
 
 Run the tests with the database up. The ranking model's tests need PyTorch, installed as shown above:
@@ -160,4 +201,4 @@ GroupLens and the University of Minnesota do not endorse this project.
 - [ ] Stage 2: Claude conversation (built and tested with a stand-in for Claude; waiting on a real evaluation)
 - [x] Stage 3: PyTorch ranking model
 - [ ] Stage 4: Simulated-user evaluation (quick picks measured; the Claude comparison is waiting on an API key)
-- [ ] Stage 5: Public launch
+- [ ] Stage 5: Public launch (ready to host, with spending and rate limits and an MCP server; not hosted yet)

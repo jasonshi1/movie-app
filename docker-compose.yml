@@ -20,7 +20,8 @@ services:
       retries: 20
 
   backend:
-    build: ./backend
+    # The same image as the hosted app, so it also serves the built frontend on port 8000.
+    build: .
     environment:
       DATABASE_URL: postgresql://movie_app:${POSTGRES_PASSWORD:-movie_app_dev}@db:5432/movie_app
       # Read from .env. Leave it unset to run without the Claude conversation.
