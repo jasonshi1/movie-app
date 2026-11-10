@@ -29,5 +29,5 @@ def test_database_url():
 def empty_catalog(test_database_url, monkeypatch):
     monkeypatch.setattr(settings, "database_url", test_database_url)
     with psycopg.connect(test_database_url) as conn:
-        conn.execute("TRUNCATE films, genome_tags")
+        conn.execute("TRUNCATE films, genome_tags, ranker")
     return test_database_url

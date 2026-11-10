@@ -18,7 +18,10 @@ jobs:
       - name: Install
         working-directory: backend
         # Editable: the pipeline finds db/init, data/ and results/ relative to the repository.
-        run: pip install -e ".[dev,pipeline]"
+        # The CPU build of PyTorch is enough for the ranker tests, which train a tiny model.
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev,pipeline,train]"
       - name: Lint
         working-directory: backend
         run: ruff check .

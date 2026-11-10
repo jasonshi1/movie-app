@@ -11,7 +11,7 @@ from dataclasses import dataclass
 import psycopg
 
 from app.config import settings
-from app.recommend import FILM_CARD_COLUMNS, POPULARITY_WEIGHT, film_card
+from app.recommend import FILM_CARD_COLUMNS, POPULARITY_WEIGHT, film_card, vector_literal
 
 SEARCH_LIMIT = 8
 # How much the described mood counts against long-term taste. Mood similarities vary little
@@ -40,22 +40,29 @@ class SearchFilters:
     certifications: tuple[str, ...] | None = None
 
 
+# Ranks first and fetches details for the winners only. Selecting every film's genome as text
+# while sorting made unfiltered searches take about 0.5 seconds.
 _SEARCH = f"""
-WITH taste AS (SELECT avg(genome) AS vector FROM films WHERE movie_id = ANY(%(liked)s))
+WITH taste AS (SELECT avg(genome) AS vector FROM films WHERE movie_id = ANY(%(liked)s)),
+best AS (
+    SELECT film.movie_id,
+           coalesce(1 - (film.genome <=> taste.vector), 0)
+           + %(popularity_weight)s * film.popularity
+           + coalesce(%(mood_weight)s * (1 - (film.embedding <=> %(mood)s::vector)), 0) AS score
+    FROM films AS film, taste
+    WHERE film.movie_id <> ALL(%(excluded)s)
+      AND (%(max_runtime)s::integer IS NULL OR film.runtime <= %(max_runtime)s)
+      AND (%(min_year)s::integer IS NULL OR film.year >= %(min_year)s)
+      AND (%(max_year)s::integer IS NULL OR film.year <= %(max_year)s)
+      AND (cardinality(%(genres)s::text[]) = 0 OR film.genres && %(genres)s::text[])
+      AND NOT (film.genres && %(exclude_genres)s::text[])
+      AND (%(certifications)s::text[] IS NULL OR film.certification = ANY(%(certifications)s))
+    ORDER BY score DESC, film.movie_id
+    LIMIT %(limit)s
+)
 SELECT {FILM_CARD_COLUMNS}, film.genome::text
-FROM films AS film, taste
-WHERE film.movie_id <> ALL(%(excluded)s)
-  AND (%(max_runtime)s::integer IS NULL OR film.runtime <= %(max_runtime)s)
-  AND (%(min_year)s::integer IS NULL OR film.year >= %(min_year)s)
-  AND (%(max_year)s::integer IS NULL OR film.year <= %(max_year)s)
-  AND (cardinality(%(genres)s::text[]) = 0 OR film.genres && %(genres)s::text[])
-  AND NOT (film.genres && %(exclude_genres)s::text[])
-  AND (%(certifications)s::text[] IS NULL OR film.certification = ANY(%(certifications)s))
-ORDER BY coalesce(1 - (film.genome <=> taste.vector), 0)
-         + %(popularity_weight)s * film.popularity
-         + coalesce(%(mood_weight)s * (1 - (film.embedding <=> %(mood)s::vector)), 0) DESC,
-         film.movie_id
-LIMIT %(limit)s
+FROM best JOIN films AS film USING (movie_id)
+ORDER BY best.score DESC, film.movie_id
 """
 
 _DETAILS = f"""
@@ -111,7 +118,7 @@ def search_candidates(
                 ),
                 "popularity_weight": POPULARITY_WEIGHT,
                 "mood_weight": MOOD_WEIGHT,
-                "mood": "[" + ",".join(f"{value:.6f}" for value in mood) + "]" if mood else None,
+                "mood": vector_literal(mood) if mood else None,
                 "limit": SEARCH_LIMIT,
             },
         ).fetchall()
