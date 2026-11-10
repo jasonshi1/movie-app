@@ -3,7 +3,7 @@
 import numpy as np
 import psycopg
 
-from pipeline.load_db import vector_literal
+from app.recommend import vector_literal
 
 GENOME_SIZE = 1084
 EMBEDDING_SIZE = 384
@@ -22,10 +22,12 @@ def tagged(**weights) -> np.ndarray:
 
 
 def insert_film(conn, movie_id, title, genome, popularity=0.0, **extra):
+    ranker_input, ranker_output = extra.get("ranker_input"), extra.get("ranker_output")
     conn.execute(
         "INSERT INTO films (movie_id, imdb_id, title, year, genres, directors, cast_members,"
-        " runtime, certification, wikipedia_title, description, popularity, genome, embedding)"
-        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        " runtime, certification, wikipedia_title, description, popularity, genome, embedding,"
+        " ranker_input, ranker_output)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             movie_id,
             f"{movie_id:07d}",
@@ -41,6 +43,8 @@ def insert_film(conn, movie_id, title, genome, popularity=0.0, **extra):
             popularity,
             vector_literal(genome),
             vector_literal(extra.get("embedding", unit(EMBEDDING_SIZE, 0))),
+            vector_literal(ranker_input) if ranker_input is not None else None,
+            vector_literal(ranker_output) if ranker_output is not None else None,
         ),
     )
 

@@ -2,7 +2,7 @@
 
 A movie picker for one person. Name a few films you love and get one film to watch tonight, with the reason it was chosen. Say "not that one" and it tries again.
 
-This project is in development. Quick picks work without an LLM. A conversation with Claude is built and switches on when the server has an Anthropic API key. It hasn't been evaluated against the real model yet.
+This project is in development. Quick picks come from a ranking model trained with PyTorch, with no LLM involved. A conversation with Claude is built and switches on when the server has an Anthropic API key. It hasn't been evaluated against the real model yet.
 
 ## Run it
 
@@ -24,6 +24,17 @@ py -3.13 -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev,pipeline]"
 .venv/Scripts/python -m pipeline.build
 ```
+
+Then train the ranking model and load it. Install PyTorch first: the command below is for an NVIDIA GPU, and training also works on a CPU, just more slowly. On an RTX 3060 it takes a few minutes:
+
+```bash
+.venv/Scripts/python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+.venv/Scripts/python -m pip install -e ".[dev,pipeline,train]"
+.venv/Scripts/python -m pipeline.ranker
+.venv/Scripts/python -m pipeline.load_db
+```
+
+Without a trained model, quick picks use the Stage 1 method described below.
 
 ## Chat with Claude
 
@@ -52,36 +63,42 @@ The weight given to the described mood was measured offline: see [results/stage2
 
 ## How picks are chosen
 
-Your favourites are averaged into a taste profile across 1,084 Tag Genome themes. Each film is scored by its similarity to that profile, plus a weighted popularity score.
+A ranking model built with PyTorch turns your favourites into a taste vector, with no retraining for each person. Each film has two learned vectors, built from its 1,084 Tag Genome theme scores, its text embedding and a per-film correction, plus a learned bias for how widely liked it is. Your favourites' vectors are averaged, and a small network adjusts the average into your taste vector. Every film is scored against it in one database query.
 
-To reproduce the comparison of methods:
+The model is trained in PyTorch on a GPU. The app runs it with numpy and pgvector, so the server needs neither PyTorch nor a GPU. The reason shown with a pick still comes from Tag Genome themes, because people can read those.
 
-```bash
-.venv/Scripts/python -m pipeline.evaluate
-```
-
-Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. Results on 5,000 users who played no part in choosing the method, at 5 favourites:
+Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 102,061 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites:
 
 | Method | NDCG@10 | Distinct first picks |
 |---|---:|---:|
-| Tag Genome + popularity (used) | 0.298 | 82 |
+| Ranking model (used) | 0.348 | 349 |
+| Tag Genome + popularity (Stage 1) | 0.298 | 82 |
 | Text embedding + popularity | 0.291 | 59 |
 | Popularity alone | 0.275 | 15 |
 | Tag Genome alone | 0.161 | 660 |
 | Text embedding alone | 0.117 | 829 |
 | Genre match | 0.073 | 628 |
 
-Full results are in [results/stage1_baselines.md](results/stage1_baselines.md).
+Compared user by user, the model beats Stage 1 by 0.049 ± 0.006 at 5 favourites (95% confidence). Its lead grows with more favourites, from 0.015 at 1 favourite to 0.104 at 20. It also offers 4 times as many different first picks, so people see fewer of the same famous films.
+
+To reproduce the results:
+
+```bash
+.venv/Scripts/python -m pipeline.evaluate
+.venv/Scripts/python -m pipeline.ranker
+```
+
+Full results are in [results/stage3_ranker.md](results/stage3_ranker.md) and [results/stage1_baselines.md](results/stage1_baselines.md).
 
 ### Known limits
 
-- With only one favourite, popularity alone scores higher (0.275 against 0.257).
-- First picks lean toward well-known films, because people mostly rate films they've heard of and that rewards popularity in this kind of test.
+- With only one favourite, the model (0.272) is no better than recommending the most popular films (0.275).
+- The conversation with Claude still searches with the Stage 1 taste profile. Switching it to the model means re-measuring how much the described mood should count.
 - The catalog only covers films up to 2014, and age ratings are known for just 23% of films.
 
 ## Develop
 
-Run the tests with the database up:
+Run the tests with the database up. The ranking model's tests need PyTorch, installed as shown above:
 
 ```bash
 cd backend
@@ -110,6 +127,6 @@ GroupLens and the University of Minnesota do not endorse this project.
 - [x] Stage 0: Foundation
 - [x] Stage 1: Catalog and baseline recommendations, no LLM
 - [ ] Stage 2: Claude conversation (built and tested with a stand-in for Claude; waiting on a real evaluation)
-- [ ] Stage 3: PyTorch ranking model
+- [x] Stage 3: PyTorch ranking model
 - [ ] Stage 4: Simulated-user evaluation
 - [ ] Stage 5: Public launch
