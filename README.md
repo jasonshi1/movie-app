@@ -96,6 +96,37 @@ Full results are in [results/stage3_ranker.md](results/stage3_ranker.md) and [re
 - The conversation with Claude still searches with the Stage 1 taste profile. Switching it to the model means re-measuring how much the described mood should count.
 - The catalog only covers films up to 2014, and age ratings are known for just 23% of films.
 
+## Simulated users
+
+**With quick picks, 77.0% ± 1.2% of simulated users get a film they liked within 5 suggestions** (95% confidence, 5,000 users).
+
+Each simulated user is a real MovieLens user from the test split, which no earlier stage touched:
+
+- They give their first 5 liked films as favourites.
+- They accept a suggestion only if they rated it 4 or higher later on.
+- They turn down a film they'd already rated with "I've already seen that one", because the app can't know what someone has seen.
+- They turn down anything else with a reason built from the Tag Genome themes where it differs most from everything they liked, such as "less dinosaurs and more military".
+
+| Method | Hit within 1 | Hit within 5 | Hit within 10 |
+|---|---:|---:|---:|
+| Quick picks (ranking model) | 43.6% | 77.0% | 86.6% |
+| Quick picks (Stage 1 method) | 40.1% | 73.1% | 83.5% |
+| Most popular films | 34.5% | 68.2% | 78.3% |
+
+Compared user by user, the ranking model gets 4.0 ± 1.3 more points within 5 suggestions than Stage 1. Full results are in [results/stage4_simulation.md](results/stage4_simulation.md). To reproduce them, with no API calls:
+
+```bash
+.venv/Scripts/python -m pipeline.simulate
+```
+
+The same simulated users can talk to Claude, which reads each reason and searches again. This spends API credit, so try 10 users first. The report shows the cost per user and what 200 or 1,000 users would cost:
+
+```bash
+.venv/Scripts/python -m pipeline.simulate --claude --limit 10 --yes
+```
+
+Unrated films count as misses, so these rates understate how often people would be happy. Simulated users aren't real people, so treat the numbers as a simulation.
+
 ## Develop
 
 Run the tests with the database up. The ranking model's tests need PyTorch, installed as shown above:
@@ -128,5 +159,5 @@ GroupLens and the University of Minnesota do not endorse this project.
 - [x] Stage 1: Catalog and baseline recommendations, no LLM
 - [ ] Stage 2: Claude conversation (built and tested with a stand-in for Claude; waiting on a real evaluation)
 - [x] Stage 3: PyTorch ranking model
-- [ ] Stage 4: Simulated-user evaluation
+- [ ] Stage 4: Simulated-user evaluation (quick picks measured; the Claude comparison is waiting on an API key)
 - [ ] Stage 5: Public launch

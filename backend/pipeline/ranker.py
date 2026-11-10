@@ -24,7 +24,7 @@ import polars as pl
 import torch
 from torch import nn
 
-from app.ranker import TRAINED_MAX_FAVOURITES, taste_vectors
+from app.ranker import TRAINED_MAX_FAVOURITES
 from app.recommend import POPULARITY_WEIGHT
 from pipeline.catalog import PROCESSED_DIR, popularity_scores
 from pipeline.embed import normalize
@@ -38,6 +38,7 @@ from pipeline.evaluate import (
     build_users,
     evaluate,
     popularity_scorer,
+    ranker_scorer,
     similarity_scorer,
 )
 from pipeline.load_db import RANKER_PATH
@@ -152,16 +153,6 @@ def export(model: Ranker) -> dict[str, np.ndarray]:
             "b2": model.encoder[3].bias,
         }
         return {name: value.detach().cpu().numpy().astype(np.float32) for name, value in arrays.items()}
-
-
-def ranker_scorer(exported: dict[str, np.ndarray]) -> Scorer:
-    """Score every film for each profile with the numpy code the app runs."""
-
-    def score(profiles: list[np.ndarray]) -> np.ndarray:
-        tastes = taste_vectors([exported["input_vectors"][profile] for profile in profiles], exported)
-        return tastes @ exported["output_vectors"].T + exported["bias"]
-
-    return score
 
 
 def mean_ndcg(scorer: Scorer, users: list[EvalUser]) -> float:
