@@ -1,0 +1,323 @@
+{
+  "users": 5000,
+  "genome_alpha": 1.0,
+  "text_alpha": 1.0,
+  "genome_sweep": [
+    {
+      "alpha": 0.0,
+      "ndcg": 0.15320755202046327,
+      "distinct_first_picks": 426
+    },
+    {
+      "alpha": 0.1,
+      "ndcg": 0.21253442218549257,
+      "distinct_first_picks": 327
+    },
+    {
+      "alpha": 0.25,
+      "ndcg": 0.24615593692560292,
+      "distinct_first_picks": 194
+    },
+    {
+      "alpha": 0.5,
+      "ndcg": 0.2672933434421322,
+      "distinct_first_picks": 107
+    },
+    {
+      "alpha": 1.0,
+      "ndcg": 0.2801794940624622,
+      "distinct_first_picks": 65
+    },
+    {
+      "alpha": 1.5,
+      "ndcg": 0.28393651277382814,
+      "distinct_first_picks": 42
+    },
+    {
+      "alpha": 2.0,
+      "ndcg": 0.2852148480778706,
+      "distinct_first_picks": 27
+    },
+    {
+      "alpha": 3.0,
+      "ndcg": 0.2841444094592694,
+      "distinct_first_picks": 24
+    },
+    {
+      "alpha": 4.0,
+      "ndcg": 0.2820546409135225,
+      "distinct_first_picks": 17
+    },
+    {
+      "alpha": 6.0,
+      "ndcg": 0.2780684700041181,
+      "distinct_first_picks": 12
+    },
+    {
+      "alpha": 8.0,
+      "ndcg": 0.2762214029868227,
+      "distinct_first_picks": 12
+    },
+    {
+      "alpha": 12.0,
+      "ndcg": 0.27364406043971995,
+      "distinct_first_picks": 12
+    }
+  ],
+  "text_sweep": [
+    {
+      "alpha": 0.0,
+      "ndcg": 0.11168817219500857,
+      "distinct_first_picks": 521
+    },
+    {
+      "alpha": 0.1,
+      "ndcg": 0.18090229337426272,
+      "distinct_first_picks": 289
+    },
+    {
+      "alpha": 0.25,
+      "ndcg": 0.22777352044214974,
+      "distinct_first_picks": 172
+    },
+    {
+      "alpha": 0.5,
+      "ndcg": 0.2592375506748602,
+      "distinct_first_picks": 97
+    },
+    {
+      "alpha": 1.0,
+      "ndcg": 0.2742755054026662,
+      "distinct_first_picks": 47
+    },
+    {
+      "alpha": 1.5,
+      "ndcg": 0.2775612446747331,
+      "distinct_first_picks": 28
+    },
+    {
+      "alpha": 2.0,
+      "ndcg": 0.2779576551077027,
+      "distinct_first_picks": 23
+    },
+    {
+      "alpha": 3.0,
+      "ndcg": 0.27716885013095044,
+      "distinct_first_picks": 19
+    },
+    {
+      "alpha": 4.0,
+      "ndcg": 0.2755361308357072,
+      "distinct_first_picks": 17
+    },
+    {
+      "alpha": 6.0,
+      "ndcg": 0.27368616942398616,
+      "distinct_first_picks": 12
+    },
+    {
+      "alpha": 8.0,
+      "ndcg": 0.2721455894948386,
+      "distinct_first_picks": 11
+    },
+    {
+      "alpha": 12.0,
+      "ndcg": 0.2703808431286185,
+      "distinct_first_picks": 11
+    }
+  ],
+  "results": {
+    "Popularity": {
+      "1": {
+        "ndcg": 0.27492324275588415,
+        "ndcg_ci95": 0.0077728821666676485,
+        "recall": 0.26563722222222225,
+        "distinct_first_picks": 15
+      },
+      "3": {
+        "ndcg": 0.27492324275588415,
+        "ndcg_ci95": 0.0077728821666676485,
+        "recall": 0.26563722222222225,
+        "distinct_first_picks": 15
+      },
+      "5": {
+        "ndcg": 0.27492324275588415,
+        "ndcg_ci95": 0.0077728821666676485,
+        "recall": 0.26563722222222225,
+        "distinct_first_picks": 15
+      },
+      "10": {
+        "ndcg": 0.27492324275588415,
+        "ndcg_ci95": 0.0077728821666676485,
+        "recall": 0.26563722222222225,
+        "distinct_first_picks": 15
+      },
+      "20": {
+        "ndcg": 0.27492324275588415,
+        "ndcg_ci95": 0.0077728821666676485,
+        "recall": 0.26563722222222225,
+        "distinct_first_picks": 15
+      }
+    },
+    "Genre match": {
+      "1": {
+        "ndcg": 0.08834690761058629,
+        "ndcg_ci95": 0.004104805101227037,
+        "recall": 0.07606833333333334,
+        "distinct_first_picks": 623
+      },
+      "3": {
+        "ndcg": 0.07399405225625055,
+        "ndcg_ci95": 0.003625014054548604,
+        "recall": 0.06677000000000001,
+        "distinct_first_picks": 614
+      },
+      "5": {
+        "ndcg": 0.07333213745929434,
+        "ndcg_ci95": 0.0036618053204452213,
+        "recall": 0.06437793650793651,
+        "distinct_first_picks": 628
+      },
+      "10": {
+        "ndcg": 0.0673354703760658,
+        "ndcg_ci95": 0.0034227480487318295,
+        "recall": 0.061215079365079375,
+        "distinct_first_picks": 498
+      },
+      "20": {
+        "ndcg": 0.06536692184114364,
+        "ndcg_ci95": 0.0032746717939044936,
+        "recall": 0.060363015873015874,
+        "distinct_first_picks": 405
+      }
+    },
+    "Text embedding": {
+      "1": {
+        "ndcg": 0.05756914346417602,
+        "ndcg_ci95": 0.0031313542742845966,
+        "recall": 0.052293095238095236,
+        "distinct_first_picks": 996
+      },
+      "3": {
+        "ndcg": 0.10220298694516179,
+        "ndcg_ci95": 0.004065466197802977,
+        "recall": 0.09444134920634921,
+        "distinct_first_picks": 1095
+      },
+      "5": {
+        "ndcg": 0.11653760024856574,
+        "ndcg_ci95": 0.004313039789282047,
+        "recall": 0.1083813492063492,
+        "distinct_first_picks": 829
+      },
+      "10": {
+        "ndcg": 0.13484521243092476,
+        "ndcg_ci95": 0.004510544862877471,
+        "recall": 0.12714492063492067,
+        "distinct_first_picks": 510
+      },
+      "20": {
+        "ndcg": 0.15499882348939412,
+        "ndcg_ci95": 0.004784834101961773,
+        "recall": 0.14539531746031747,
+        "distinct_first_picks": 318
+      }
+    },
+    "Tag Genome": {
+      "1": {
+        "ndcg": 0.12889049033830702,
+        "ndcg_ci95": 0.005304127592878127,
+        "recall": 0.11846547619047619,
+        "distinct_first_picks": 914
+      },
+      "3": {
+        "ndcg": 0.15477803870229415,
+        "ndcg_ci95": 0.005659007943965234,
+        "recall": 0.14565373015873015,
+        "distinct_first_picks": 861
+      },
+      "5": {
+        "ndcg": 0.1608999629068695,
+        "ndcg_ci95": 0.0056738589718192695,
+        "recall": 0.15008753968253968,
+        "distinct_first_picks": 660
+      },
+      "10": {
+        "ndcg": 0.17102339006359316,
+        "ndcg_ci95": 0.005661050071393822,
+        "recall": 0.16156785714285712,
+        "distinct_first_picks": 474
+      },
+      "20": {
+        "ndcg": 0.1802702586033512,
+        "ndcg_ci95": 0.005627862516142912,
+        "recall": 0.17050563492063492,
+        "distinct_first_picks": 384
+      }
+    },
+    "Text embedding + popularity": {
+      "1": {
+        "ndcg": 0.2593887211212691,
+        "ndcg_ci95": 0.007171927054455785,
+        "recall": 0.2495229365079365,
+        "distinct_first_picks": 154
+      },
+      "3": {
+        "ndcg": 0.28332477360874764,
+        "ndcg_ci95": 0.007546188583550635,
+        "recall": 0.26978753968253966,
+        "distinct_first_picks": 77
+      },
+      "5": {
+        "ndcg": 0.2907400774231438,
+        "ndcg_ci95": 0.007617458704313876,
+        "recall": 0.2763072222222222,
+        "distinct_first_picks": 59
+      },
+      "10": {
+        "ndcg": 0.295986979733622,
+        "ndcg_ci95": 0.007705662548242515,
+        "recall": 0.2793036507936508,
+        "distinct_first_picks": 38
+      },
+      "20": {
+        "ndcg": 0.30062033133269417,
+        "ndcg_ci95": 0.007745052458977524,
+        "recall": 0.2833720634920635,
+        "distinct_first_picks": 34
+      }
+    },
+    "Tag Genome + popularity": {
+      "1": {
+        "ndcg": 0.2572540545779383,
+        "ndcg_ci95": 0.0073992313365726205,
+        "recall": 0.24752642857142856,
+        "distinct_first_picks": 181
+      },
+      "3": {
+        "ndcg": 0.29156277903964256,
+        "ndcg_ci95": 0.007828404092747914,
+        "recall": 0.28159063492063496,
+        "distinct_first_picks": 95
+      },
+      "5": {
+        "ndcg": 0.29814279817664685,
+        "ndcg_ci95": 0.007884810658188517,
+        "recall": 0.28814103174603173,
+        "distinct_first_picks": 82
+      },
+      "10": {
+        "ndcg": 0.3039402314508793,
+        "ndcg_ci95": 0.00790450598412319,
+        "recall": 0.2945915079365079,
+        "distinct_first_picks": 66
+      },
+      "20": {
+        "ndcg": 0.3086032529574404,
+        "ndcg_ci95": 0.007951176042527746,
+        "recall": 0.29936285714285715,
+        "distinct_first_picks": 58
+      }
+    }
+  }
+}

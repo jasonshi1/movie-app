@@ -17,7 +17,8 @@ jobs:
         run: docker compose up -d --wait db
       - name: Install
         working-directory: backend
-        run: pip install ".[dev]"
+        # Editable: the pipeline finds db/init, data/ and results/ relative to the repository.
+        run: pip install -e ".[dev,pipeline]"
       - name: Lint
         working-directory: backend
         run: ruff check .
