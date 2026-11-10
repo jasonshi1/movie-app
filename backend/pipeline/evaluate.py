@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from app.ranker import taste_vectors
 from pipeline.catalog import LIKED_RATING, PROCESSED_DIR, popularity_scores
 from pipeline.embed import normalize
 
@@ -115,6 +116,16 @@ def similarity_scorer(vectors: np.ndarray, popularity: np.ndarray, alpha: float 
     def score(profiles: list[np.ndarray]) -> np.ndarray:
         taste = normalize(np.stack([vectors[profile].mean(axis=0) for profile in profiles]))
         return taste @ vectors.T + alpha * popularity
+
+    return score
+
+
+def ranker_scorer(exported: dict[str, np.ndarray]) -> Scorer:
+    """Score every film for each profile with the numpy code the app runs."""
+
+    def score(profiles: list[np.ndarray]) -> np.ndarray:
+        tastes = taste_vectors([exported["input_vectors"][profile] for profile in profiles], exported)
+        return tastes @ exported["output_vectors"].T + exported["bias"]
 
     return score
 
