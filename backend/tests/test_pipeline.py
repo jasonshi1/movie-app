@@ -2,6 +2,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from pipeline import load_db
 from pipeline.catalog import parse_title
 from pipeline.enrich import merge_bindings, resolve_extracts
 from pipeline.evaluate import (
@@ -143,3 +144,10 @@ def test_genre_matrix_marks_each_films_genres():
     matrix = genre_matrix([["Comedy"], ["Drama", "Comedy"], []])
 
     assert matrix.tolist() == [[1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]
+
+
+def test_apply_schema_fails_loudly_when_scripts_are_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(load_db, "INIT_DIR", tmp_path)
+
+    with pytest.raises(FileNotFoundError):
+        load_db.apply_schema(None)
