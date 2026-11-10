@@ -132,3 +132,26 @@ def test_chat_has_its_own_hourly_limit(chat, monkeypatch):
 
     assert response.status_code == 429
     assert int(response.headers["Retry-After"]) > 60
+
+
+def test_visitors_are_the_connection_address_unless_a_proxy_header_is_trusted(monkeypatch):
+    headers = {"fly-client-ip": "203.0.113.7", "x-forwarded-for": "198.51.100.1"}
+
+    assert limits.visitor_address(headers, "10.0.0.2") == "10.0.0.2"
+
+    monkeypatch.setattr(settings, "client_ip_header", "Fly-Client-IP")
+    assert limits.visitor_address(headers, "10.0.0.2") == "203.0.113.7"
+    assert limits.visitor_address({}, "10.0.0.2") == "10.0.0.2"
+
+
+def test_rate_limits_follow_the_trusted_proxy_header(empty_catalog, monkeypatch):
+    load_sample_catalog(empty_catalog)
+    monkeypatch.setattr(settings, "client_ip_header", "Fly-Client-IP")
+    monkeypatch.setattr(settings, "requests_per_minute", 1)
+
+    def search(address):
+        return client.get(
+            "/api/films/search", params={"q": "matrix"}, headers={"Fly-Client-IP": address}
+        ).status_code
+
+    assert [search("203.0.113.7"), search("203.0.113.8"), search("203.0.113.7")] == [200, 200, 429]

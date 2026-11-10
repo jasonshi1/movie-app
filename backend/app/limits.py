@@ -8,7 +8,7 @@ small server.
 
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import psycopg
@@ -77,6 +77,16 @@ class RateLimiter:
 
 
 limiter = RateLimiter()
+
+
+def visitor_address(headers: Mapping[str, str], connection_host: str | None) -> str:
+    """Who a request counts against: the trusted proxy header if one is set, else the
+    connection's address."""
+    if settings.client_ip_header:
+        forwarded = headers.get(settings.client_ip_header.lower(), "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return connection_host or "unknown"
 
 
 def chat_limit() -> Limit:
