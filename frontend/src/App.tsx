@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import Chat from "./Chat";
+import FilmTitle from "./FilmTitle";
 import { details, withYear } from "./format";
 import { loadFavourites, loadPreferences, saveFavourites, savePreferences } from "./storage";
 import type { FilmMatch, PickedFilm, Preferences } from "./types";
@@ -13,6 +14,12 @@ type Pick = {
 type PickStatus = "idle" | "picking" | "none-left" | "too-fast" | "error";
 
 const SEARCH_DELAY_MS = 200;
+
+const today = new Intl.DateTimeFormat(undefined, {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+}).format(new Date());
 
 export default function App() {
   const [query, setQuery] = useState("");
@@ -33,13 +40,6 @@ export default function App() {
       .then((config) => setChatAvailable(config?.conversation ?? false))
       .catch(() => setChatAvailable(false));
   }, []);
-
-  function removeAvoidedGenre(genre: string) {
-    setPreferences((current) => ({
-      ...current,
-      avoid_genres: current.avoid_genres.filter((avoided) => avoided !== genre),
-    }));
-  }
 
   useEffect(() => {
     const term = query.trim();
@@ -116,127 +116,125 @@ export default function App() {
   const suggestions = matches.filter((film) => !favouriteIds.has(film.movie_id));
 
   return (
-    <main>
-      <h1>Tonight's Pick</h1>
-      <p className="intro">Name a few films you love, and get one film to watch tonight.</p>
-
-      <label htmlFor="film-search">Films you love</label>
-      <input
-        id="film-search"
-        type="search"
-        autoComplete="off"
-        placeholder="Start typing a title"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-
-      {suggestions.length > 0 && (
-        <ul className="suggestions" aria-label="Matching films">
-          {suggestions.map((film) => (
-            <li key={film.movie_id}>
-              <button type="button" onClick={() => addFavourite(film)}>
-                <span>{withYear(film)}</span>
-                {film.directors[0] && <small>{film.directors[0]}</small>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {favourites.length > 0 && (
-        <ul className="favourites" aria-label="Your favourites">
-          {favourites.map((film) => (
-            <li key={film.movie_id}>
-              {withYear(film)}
-              <button
-                type="button"
-                aria-label={`Remove ${film.title}`}
-                onClick={() => removeFavourite(film.movie_id)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <button
-        className="primary"
-        type="button"
-        disabled={favourites.length === 0 || status === "picking"}
-        onClick={() => void requestPick(rejected)}
-      >
-        {status === "picking" ? "Choosing..." : "Pick a film"}
-      </button>
-
-      {status === "none-left" && <p role="status">There are no more films to suggest.</p>}
-      {status === "error" && <p role="alert">Something went wrong. Please try again.</p>}
-      {status === "too-fast" && (
-        <p role="alert">You're going a bit fast. Try again in a moment.</p>
-      )}
-
-      {pick && (
-        <article className="pick" aria-label="Your pick">
-          <h2>{withYear(pick.film)}</h2>
-          <p className="details">{details(pick.film)}</p>
-          <p>
-            Closest to <strong>{pick.reason.similar_to}</strong> among your favourites.
-            {pick.reason.themes.length > 0 && ` Shared themes: ${pick.reason.themes.join(", ")}.`}
-          </p>
-          <div className="actions">
-            <button type="button" disabled={status === "picking"} onClick={rejectPick}>
-              Not that one
-            </button>
-            <a href={pick.film.where_to_watch_url} target="_blank" rel="noreferrer">
-              Where to watch
-            </a>
-            {pick.film.wikipedia_url && (
-              <a href={pick.film.wikipedia_url} target="_blank" rel="noreferrer">
-                Wikipedia
-              </a>
-            )}
-          </div>
-        </article>
-      )}
-
-      {(preferences.avoid_genres.length > 0 || preferences.max_runtime) && (
-        <ul className="favourites" aria-label="Saved preferences">
-          {preferences.avoid_genres.map((genre) => (
-            <li key={genre}>
-              No {genre}
-              <button
-                type="button"
-                aria-label={`Stop avoiding ${genre}`}
-                onClick={() => removeAvoidedGenre(genre)}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-          {preferences.max_runtime && (
-            <li>
-              Up to {preferences.max_runtime} min
-              <button
-                type="button"
-                aria-label="Remove the runtime limit"
-                onClick={() => setPreferences((current) => ({ ...current, max_runtime: null }))}
-              >
-                ×
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
-
-      {chatAvailable && (
-        <Chat favourites={favourites} preferences={preferences} onPreferencesChange={setPreferences} />
-      )}
-      {chatAvailable === false && (
-        <p className="details" role="note">
-          Chat with Claude isn't set up on this server yet. You can still pick from your favourites
-          above.
+    <>
+      <header className="masthead">
+        <p className="dateline">
+          <span>{today}</span>
+          <span>Films up to 2014</span>
         </p>
-      )}
+        <h1>
+          Tonight’s <em>Pick</em>
+        </h1>
+        <p className="intro">Name a few films you love, and get one film to watch tonight.</p>
+      </header>
+
+      <main>
+        <section className="step">
+          <label className="step-title" htmlFor="film-search">
+            Films you love
+          </label>
+          <input
+            id="film-search"
+            type="search"
+            autoComplete="off"
+            placeholder="Start typing a title"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+
+          {suggestions.length > 0 && (
+            <ul className="suggestions" aria-label="Matching films">
+              {suggestions.map((film) => (
+                <li key={film.movie_id}>
+                  <button type="button" onClick={() => addFavourite(film)}>
+                    <span>{withYear(film)}</span>
+                    {film.directors[0] && <small>{film.directors[0]}</small>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {favourites.length > 0 && (
+            <ul className="tags" aria-label="Your favourites">
+              {favourites.map((film) => (
+                <li key={film.movie_id}>
+                  {withYear(film)}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${film.title}`}
+                    onClick={() => removeFavourite(film.movie_id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            className="primary"
+            type="button"
+            disabled={favourites.length === 0 || status === "picking"}
+            onClick={() => void requestPick(rejected)}
+          >
+            {status === "picking" ? "Choosing…" : "Pick a film"}
+          </button>
+
+          {status === "none-left" && (
+            <p className="notice" role="status">
+              There are no more films to suggest.
+            </p>
+          )}
+          {status === "error" && (
+            <p className="notice" role="alert">
+              Something went wrong. Please try again.
+            </p>
+          )}
+          {status === "too-fast" && (
+            <p className="notice" role="alert">
+              You're going a bit fast. Try again in a moment.
+            </p>
+          )}
+        </section>
+
+        {pick && (
+          <article className="pick" aria-label="Your pick">
+            <p className="kicker">Tonight</p>
+            <h2>
+              <FilmTitle film={pick.film} />
+            </h2>
+            <p className="details">{details(pick.film)}</p>
+            <p className="reason">
+              Closest to <strong>{pick.reason.similar_to}</strong> among your favourites.
+              {pick.reason.themes.length > 0 && ` Shared themes: ${pick.reason.themes.join(", ")}.`}
+            </p>
+            <div className="actions">
+              <button type="button" disabled={status === "picking"} onClick={rejectPick}>
+                Not that one
+              </button>
+              <a href={pick.film.where_to_watch_url} target="_blank" rel="noreferrer">
+                Where to watch
+              </a>
+              {pick.film.wikipedia_url && (
+                <a href={pick.film.wikipedia_url} target="_blank" rel="noreferrer">
+                  Wikipedia
+                </a>
+              )}
+            </div>
+          </article>
+        )}
+
+        {chatAvailable && (
+          <Chat favourites={favourites} preferences={preferences} onPreferencesChange={setPreferences} />
+        )}
+        {chatAvailable === false && (
+          <p className="notice quiet" role="note">
+            Chat with Claude isn't set up on this server yet. You can still pick from your favourites
+            above.
+          </p>
+        )}
+      </main>
 
       <footer>
         Film data from <a href="https://grouplens.org/datasets/movielens/">MovieLens</a> and the{" "}
@@ -245,6 +243,6 @@ export default function App() {
         <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA). Free and non-commercial. The
         catalog covers films up to 2014.
       </footer>
-    </main>
+    </>
   );
 }
