@@ -1,6 +1,6 @@
 # Tonight's Pick
 
-A movie picker for one person. Name a few films you love and get one film to watch tonight, with the reason it was chosen. Say "not that one" and it tries again.
+A movie picker for one person. Name a few films you love and get three to choose from tonight, each with the reason it was chosen. Turn one down and the next best film takes its place.
 
 This project is in development. Quick picks come from a ranking model trained with PyTorch, with no LLM involved. A conversation with Claude is built and switches on when the server has an Anthropic API key. It hasn't been evaluated against the real model yet.
 
@@ -70,6 +70,8 @@ The weight given to the described mood was measured offline: see [results/stage2
 A ranking model built with PyTorch turns your favourites into a taste vector, with no retraining for each person. Each film has two learned vectors, built from its 1,084 Tag Genome theme scores, its text embedding and a per-film correction, plus a learned bias for how widely liked it is. Your favourites' vectors are averaged, and a small network adjusts the average into your taste vector. Every film is scored against it in one database query.
 
 The model is trained in PyTorch on a GPU. The app runs it with numpy and pgvector, so the server needs neither PyTorch nor a GPU. The reason shown with a pick still comes from Tag Genome themes, because people can read those.
+
+Quick picks show three films. The first is always the model's best film, so the results below apply to it. The other two are the next best, skipping any film from the same series as one already shown, so a fan of *Toy Story* doesn't get three Star Wars films. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
 
 Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 102,061 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites:
 

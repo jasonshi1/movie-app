@@ -14,6 +14,8 @@ type Pick = {
 type PickStatus = "idle" | "picking" | "none-left" | "too-fast" | "error";
 
 const SEARCH_DELAY_MS = 200;
+const PICK_COUNT = 3;
+const COUNT_WORDS = ["none", "one", "two", "three", "four", "five"];
 
 const today = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
@@ -27,7 +29,9 @@ export default function App() {
   const [favourites, setFavourites] = useState<FilmMatch[]>(loadFavourites);
   const [preferences, setPreferences] = useState<Preferences>(loadPreferences);
   const [rejected, setRejected] = useState<number[]>([]);
-  const [pick, setPick] = useState<Pick | null>(null);
+  const [picks, setPicks] = useState<Pick[]>([]);
+  // The film whose replacement is being fetched.
+  const [replacing, setReplacing] = useState<number | null>(null);
   const [status, setStatus] = useState<PickStatus>("idle");
   const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
 
@@ -66,52 +70,86 @@ export default function App() {
     setFavourites((current) => [...current, film]);
     setQuery("");
     setMatches([]);
-    setPick(null);
+    setPicks([]);
     setStatus("idle");
   }
 
   function removeFavourite(movieId: number) {
     setFavourites((current) => current.filter((film) => film.movie_id !== movieId));
-    setPick(null);
+    setPicks([]);
     setStatus("idle");
   }
 
-  async function requestPick(rejectedIds: number[]) {
+  async function fetchPicks(
+    rejectedIds: number[],
+    count: number,
+    showing: number[] = [],
+  ): Promise<Pick[] | "none-left" | "too-fast"> {
+    const response = await fetch("/api/pick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        liked: favourites.map((film) => film.movie_id),
+        rejected: rejectedIds,
+        count,
+        showing,
+      }),
+    });
+    if (response.status === 404) return "none-left";
+    if (response.status === 429) return "too-fast";
+    if (!response.ok) throw new Error(`Pick failed with ${response.status}`);
+    return ((await response.json()) as { picks: Pick[] }).picks;
+  }
+
+  async function pickFilms(rejectedIds: number[]) {
     setStatus("picking");
     try {
-      const response = await fetch("/api/pick", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          liked: favourites.map((film) => film.movie_id),
-          rejected: rejectedIds,
-        }),
-      });
-      if (response.status === 404) {
-        setPick(null);
-        setStatus("none-left");
-        return;
-      }
-      if (response.status === 429) {
+      const result = await fetchPicks(rejectedIds, PICK_COUNT);
+      if (result === "too-fast") {
         setStatus("too-fast");
         return;
       }
-      if (!response.ok) throw new Error(`Pick failed with ${response.status}`);
-      setPick((await response.json()) as Pick);
-      setStatus("idle");
+      setPicks(result === "none-left" ? [] : result);
+      setStatus(result === "none-left" ? "none-left" : "idle");
     } catch {
-      setPick(null);
+      setPicks([]);
       setStatus("error");
     }
   }
 
-  function rejectPick() {
-    if (!pick) return;
-    const next = [...rejected, pick.film.movie_id];
+  function showOthers() {
+    const next = [...rejected, ...picks.map((pick) => pick.film.movie_id)];
     setRejected(next);
-    void requestPick(next);
+    void pickFilms(next);
   }
 
+  // Swap one pick for the next best film, keeping the others where they are.
+  async function replacePick(movieId: number) {
+    const next = [...rejected, movieId];
+    const others = picks.map((pick) => pick.film.movie_id).filter((id) => id !== movieId);
+    setRejected(next);
+    setReplacing(movieId);
+    setStatus("idle");
+    try {
+      const result = await fetchPicks(next, 1, others);
+      if (result === "too-fast") {
+        setStatus("too-fast");
+        return;
+      }
+      setPicks((current) =>
+        result === "none-left"
+          ? current.filter((pick) => pick.film.movie_id !== movieId)
+          : current.map((pick) => (pick.film.movie_id === movieId ? result[0] : pick)),
+      );
+      if (result === "none-left" && others.length === 0) setStatus("none-left");
+    } catch {
+      setStatus("error");
+    } finally {
+      setReplacing(null);
+    }
+  }
+
+  const busy = status === "picking" || replacing !== null;
   const favouriteIds = new Set(favourites.map((film) => film.movie_id));
   const suggestions = matches.filter((film) => !favouriteIds.has(film.movie_id));
 
@@ -125,7 +163,7 @@ export default function App() {
         <h1>
           Tonight’s <em>Pick</em>
         </h1>
-        <p className="intro">Name a few films you love, and get one film to watch tonight.</p>
+        <p className="intro">Name a few films you love, and get three to choose from tonight.</p>
       </header>
 
       <main>
@@ -175,10 +213,10 @@ export default function App() {
           <button
             className="primary"
             type="button"
-            disabled={favourites.length === 0 || status === "picking"}
-            onClick={() => void requestPick(rejected)}
+            disabled={favourites.length === 0 || busy}
+            onClick={() => void pickFilms(rejected)}
           >
-            {status === "picking" ? "Choosing…" : "Pick a film"}
+            {status === "picking" ? "Choosing…" : "Pick three films"}
           </button>
 
           {status === "none-left" && (
@@ -198,31 +236,53 @@ export default function App() {
           )}
         </section>
 
-        {pick && (
-          <article className="pick" aria-label="Your pick">
-            <p className="kicker">Tonight</p>
-            <h2>
-              <FilmTitle film={pick.film} />
-            </h2>
-            <p className="details">{details(pick.film)}</p>
-            <p className="reason">
-              Closest to <strong>{pick.reason.similar_to}</strong> among your favourites.
-              {pick.reason.themes.length > 0 && ` Shared themes: ${pick.reason.themes.join(", ")}.`}
-            </p>
-            <div className="actions">
-              <button type="button" disabled={status === "picking"} onClick={rejectPick}>
-                Not that one
+        {picks.length > 0 && (
+          <section className="picks" aria-label="Your picks">
+            <div className="picks-head">
+              <p className="kicker">Tonight · {COUNT_WORDS[picks.length]} to choose from</p>
+              <button type="button" disabled={busy} onClick={showOthers}>
+                Three others
               </button>
-              <a href={pick.film.where_to_watch_url} target="_blank" rel="noreferrer">
-                Where to watch
-              </a>
-              {pick.film.wikipedia_url && (
-                <a href={pick.film.wikipedia_url} target="_blank" rel="noreferrer">
-                  Wikipedia
-                </a>
-              )}
             </div>
-          </article>
+            <ol className="pick-list">
+              {picks.map((pick) => (
+                <li key={pick.film.movie_id}>
+                  <article className="pick">
+                    <h2>
+                      <FilmTitle film={pick.film} />
+                    </h2>
+                    <p className="details">{details(pick.film)}</p>
+                    <p className="reason">
+                      Closest to <strong>{pick.reason.similar_to}</strong> among your favourites.
+                      {pick.reason.themes.length > 0 &&
+                        ` Shared themes: ${pick.reason.themes.join(", ")}.`}
+                    </p>
+                    <div className="actions">
+                      <button
+                        type="button"
+                        aria-label={`Not this one: ${pick.film.title}`}
+                        disabled={busy}
+                        onClick={() => void replacePick(pick.film.movie_id)}
+                      >
+                        {replacing === pick.film.movie_id ? "Finding another…" : "Not this one"}
+                      </button>
+                      {/* Grouped so that on a phone both links wrap together under the button. */}
+                      <span className="links">
+                        <a href={pick.film.where_to_watch_url} target="_blank" rel="noreferrer">
+                          Where to watch
+                        </a>
+                        {pick.film.wikipedia_url && (
+                          <a href={pick.film.wikipedia_url} target="_blank" rel="noreferrer">
+                            Wikipedia
+                          </a>
+                        )}
+                      </span>
+                    </div>
+                  </article>
+                </li>
+              ))}
+            </ol>
+          </section>
         )}
 
         {chatAvailable && (
