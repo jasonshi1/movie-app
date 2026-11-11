@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { applyProposal, describeProposal, details, withYear } from "./format";
+import FilmTitle from "./FilmTitle";
+import { applyProposal, describeProposal, details } from "./format";
 import type { ChatReply, FilmMatch, Preferences, Proposal } from "./types";
 
 type Entry =
@@ -92,27 +93,66 @@ export default function Chat({ favourites, preferences, onPreferencesChange }: P
     setError(null);
   }
 
+  function stopAvoiding(genre: string) {
+    onPreferencesChange({
+      ...preferences,
+      avoid_genres: preferences.avoid_genres.filter((avoided) => avoided !== genre),
+    });
+  }
+
+  const hasPreferences = preferences.avoid_genres.length > 0 || preferences.max_runtime !== null;
+
   return (
-    <section className="chat" aria-label="Chat with Claude">
-      <h2>Ask Claude</h2>
+    <section className="step chat" aria-label="Chat with Claude">
+      <h2 className="step-title">Ask Claude</h2>
       <p className="intro">
-        Say what you're in the mood for, like "something tense but not violent, under two hours".
+        Say what you’re in the mood for, like “something tense but not violent, under two hours”.
       </p>
+
+      {hasPreferences && (
+        <div className="saved">
+          <p className="caption">Remembered</p>
+          <ul className="tags" aria-label="Saved preferences">
+            {preferences.avoid_genres.map((genre) => (
+              <li key={genre}>
+                No {genre}
+                <button type="button" aria-label={`Stop avoiding ${genre}`} onClick={() => stopAvoiding(genre)}>
+                  ×
+                </button>
+              </li>
+            ))}
+            {preferences.max_runtime && (
+              <li>
+                Up to {preferences.max_runtime} min
+                <button
+                  type="button"
+                  aria-label="Remove the runtime limit"
+                  onClick={() => onPreferencesChange({ ...preferences, max_runtime: null })}
+                >
+                  ×
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {entries.length > 0 && (
         <ol className="transcript">
           {entries.map((entry, index) =>
             entry.kind === "person" ? (
               <li key={index} className="person">
-                {entry.text}
+                <p>{entry.text}</p>
               </li>
             ) : (
               <li key={index} className="claude">
                 {entry.reply.pick && (
                   <article className="pick" aria-label="Claude's pick">
-                    <h3>{withYear(entry.reply.pick.film)}</h3>
+                    <h3>
+                      <FilmTitle film={entry.reply.pick.film} />
+                    </h3>
                     <p className="details">{details(entry.reply.pick.film)}</p>
-                    <p>{entry.reply.pick.reason}</p>
+                    <p className="reason">{entry.reply.pick.reason}</p>
                     <div className="actions">
                       <a href={entry.reply.pick.film.where_to_watch_url} target="_blank" rel="noreferrer">
                         Where to watch
@@ -146,7 +186,11 @@ export default function Chat({ favourites, preferences, onPreferencesChange }: P
         </ol>
       )}
 
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p className="notice" role="alert">
+          {error}
+        </p>
+      )}
 
       <form onSubmit={submit}>
         <label htmlFor="chat-message">Your message</label>
@@ -160,7 +204,7 @@ export default function Chat({ favourites, preferences, onPreferencesChange }: P
         />
         <div className="actions">
           <button className="primary" type="submit" disabled={sending || favourites.length === 0 || !draft.trim()}>
-            {sending ? "Thinking..." : "Send"}
+            {sending ? "Thinking…" : "Send"}
           </button>
           {latestPick && (
             <button type="button" disabled={sending} onClick={rejectLatest}>
@@ -174,7 +218,7 @@ export default function Chat({ favourites, preferences, onPreferencesChange }: P
           )}
         </div>
       </form>
-      {favourites.length === 0 && <p className="details">Add at least one favourite first.</p>}
+      {favourites.length === 0 && <p className="notice quiet">Add at least one favourite first.</p>}
     </section>
   );
 }
