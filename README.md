@@ -168,11 +168,11 @@ The image built from the root `Dockerfile` serves the app, the API and the MCP s
 
 `fly.toml` runs one always-on machine with 1 GB of memory in Toronto, so the link opens without waiting for the model to load. Neon hosts the database. You create both accounts and add any payment method yourself. Run these commands in your own terminal, and never paste keys into a chat.
 
-1. In Neon, create a project in a region near Toronto, such as AWS US East. Copy its connection string with connection pooling turned off.
-2. Load the catalog into it, from `backend`:
+1. In Neon, create a project in a region near Toronto, such as AWS US East. Put its connection strings in `.env.local` at the project root: `neon init` from Neon's CLI writes them there. Or create the file yourself with `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (connection pooling turned off). Git and Docker ignore the file, and the app never reads it, so tests and local Docker keep using the local database.
+2. Load the catalog into it, from `backend`. The loader creates the tables too. It uses the unpooled string, and the parentheses keep Neon's address out of your shell, so a later test run, which empties tables, can't reach it:
 
    ```bash
-   DATABASE_URL="<Neon connection string>" .venv/Scripts/python -m pipeline.load_db
+   (. ../.env.local; DATABASE_URL="$DATABASE_URL_UNPOOLED" .venv/Scripts/python -m pipeline.load_db)
    ```
 
 3. Install [flyctl](https://fly.io/docs/flyctl/install/) and sign in with `fly auth login`.
@@ -182,10 +182,10 @@ The image built from the root `Dockerfile` serves the app, the API and the MCP s
    fly apps create tonights-pick
    ```
 
-5. Store the secrets on Fly.io:
+5. Store the secrets on Fly.io, from the project root. The app gets the pooled string, which suits its short connections:
 
    ```bash
-   fly secrets set DATABASE_URL="<Neon connection string>" ANTHROPIC_API_KEY="<your key>"
+   (. ./.env.local; fly secrets set DATABASE_URL="$DATABASE_URL" ANTHROPIC_API_KEY="<your key>")
    ```
 
 6. Deploy from the project root. The first build takes a few minutes:
