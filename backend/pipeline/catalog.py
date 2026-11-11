@@ -47,6 +47,14 @@ def popularity_scores(liked_counts: np.ndarray) -> np.ndarray:
     return log_liked / log_liked.max()
 
 
+def film_popularity(films: pl.DataFrame) -> np.ndarray:
+    """Each film's 0-1 popularity. After Stage 6 the catalog stores it, because films without
+    ratings get theirs from Wikipedia page views; before, it comes from the liked counts."""
+    if "popularity" in films.columns:
+        return films["popularity"].to_numpy().astype(np.float32)
+    return popularity_scores(films["liked_count"].to_numpy())
+
+
 def split_names(value: str | None) -> list[str]:
     return [name.strip() for name in value.split(",") if name.strip()] if value else []
 

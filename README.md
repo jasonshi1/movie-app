@@ -17,7 +17,7 @@ docker compose up --build
 - API health check: http://localhost:8000/api/health
 - MCP server: http://localhost:8000/mcp
 
-The catalog starts empty. To fill it, build the data once with Python 3.13. This downloads about 2.2 GB and takes around 20 minutes:
+The catalog starts empty. To fill it, build the data once with Python 3.13. This downloads about 2.2 GB and takes about an hour the first time, mostly waiting on Wikidata and Wikipedia. Later runs reuse what they fetched:
 
 ```bash
 docker compose up -d --wait db
@@ -73,19 +73,21 @@ The model is trained in PyTorch on a GPU. The app runs it with numpy and pgvecto
 
 Quick picks show three films: the model's best, skipping any film from the same series as one already shown or one of the last 20 turned down. So a fan of *Toy Story* doesn't get three Star Wars films, and turning down *Star Wars IV* doesn't bring back *Star Wars VI*. Until something is turned down, the first pick is always the model's best film, so the results below apply to it. The simulated users further down go through the model's list one film at a time, so they don't measure the series rule. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
 
-Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 102,061 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites:
+Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 106,781 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites, ranking all 13,248 films:
 
 | Method | NDCG@10 | Distinct first picks |
 |---|---:|---:|
-| Ranking model (used) | 0.348 | 349 |
-| Tag Genome + popularity (Stage 1) | 0.298 | 82 |
-| Text embedding + popularity | 0.291 | 59 |
-| Popularity alone | 0.275 | 15 |
-| Tag Genome alone | 0.161 | 660 |
-| Text embedding alone | 0.117 | 829 |
-| Genre match | 0.073 | 628 |
+| Ranking model (used) | 0.348 | 324 |
+| Tag Genome + popularity (Stage 1) | 0.290 | 86 |
+| Text embedding + popularity | 0.276 | 57 |
+| Popularity alone | 0.252 | 9 |
+| Tag Genome alone | 0.145 | 724 |
+| Text embedding alone | 0.112 | 938 |
+| Genre match | 0.068 | 669 |
 
-Compared user by user, the model beats Stage 1 by 0.049 ± 0.006 at 5 favourites (95% confidence). Its lead grows with more favourites, from 0.015 at 1 favourite to 0.104 at 20. It also offers 4 times as many different first picks, so people see fewer of the same famous films.
+Compared user by user, the model beats Stage 1 by 0.058 ± 0.006 at 5 favourites (95% confidence). Its lead grows with more favourites, from 0.017 at 1 favourite to 0.107 at 20. It also offers almost 4 times as many different first picks, so people see fewer of the same famous films.
+
+Films from 2023 on that nobody in MovieLens rated can only count as misses here, so methods that suggest them score lower than they deserve. Popularity alone suffers most, since big new releases are among the most viewed films on Wikipedia.
 
 To reproduce the results:
 
@@ -98,13 +100,36 @@ Full results are in [results/stage3_ranker.md](results/stage3_ranker.md) and [re
 
 ### Known limits
 
-- With only one favourite, the model (0.272) is no better than recommending the most popular films (0.275).
+- With only one favourite, the model (0.264) is only a little ahead of recommending the most popular films (0.252).
 - The conversation with Claude still searches with the Stage 1 taste profile. Switching it to the model means re-measuring how much the described mood should count.
-- The catalog only covers films up to 2014, and age ratings are known for just 23% of films.
+- Quick picks rarely include films from 2023 on: only 0.1% of validation users get one among their three picks. See [Films after 2014](#films-after-2014).
+- Age ratings are known for just 31% of films.
+
+## Films after 2014
+
+The original catalog is the 9,585 films with Tag Genome scores, which stop at 2014. `pipeline.expand` adds two kinds of film:
+
+- **2,493 MovieLens films without Tag Genome scores** that training users liked at least 40 times, 1,361 of them from 2015 to 2023. They have ratings, so the model learns them like any other film.
+- **1,170 films released from 2023 to today**, from Wikidata, that have an English Wikipedia article in at least 10 languages: 333 from 2023, 358 from 2024, 301 from 2025 and 178 so far from 2026. MovieLens ends in October 2023, so nobody has rated them. Films that aren't out yet are left out, including ones dated only to this year, until the year is over.
+
+New films have no Tag Genome themes, so they're predicted from each film's Wikipedia introduction, genres and year. A ridge regression is fitted on the films that have themes, then each theme is rescaled to its real spread, so a film's distinctive themes come out on top rather than ones most films share. On 958 films held out of fitting, the predictions find 35% of a film's real top 10 themes, against 27% for averaging films of the same genres. Details are in [results/stage6_themes.md](results/stage6_themes.md).
+
+Films without ratings are left out of the model's training, so they aren't taught to look like films nobody chose. Their popularity comes from Wikipedia page views over the last 12 months, through a line fitted on the rated films (R² 0.42), and the model's popularity term for them is predicted from page views and themes.
+
+To check how well a film without ratings is ranked, the model was trained again as if MovieLens's 196 films from 2021 on had no ratings. For people who went on to like one of them, its median position fell only from the top 14.0% to the top 16.5%. But even with their ratings these recent films rank low, because MovieLens users rated few of them, so quick picks rarely show films from 2023 on: 0.1% of validation users get one among their three picks. They're still in the catalog: search finds them, and Claude's chat and the MCP tools can choose them, for example for "something from 2025".
+
+To add films released since the last run, from `backend`:
+
+```bash
+.venv/Scripts/python -m pipeline.expand
+.venv/Scripts/python -m pipeline.ranker
+```
+
+Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
 
 ## Simulated users
 
-**With quick picks, 77.0% ± 1.2% of simulated users get a film they liked within 5 suggestions** (95% confidence, 5,000 users).
+**With quick picks, 77.9% ± 1.2% of simulated users get a film they liked within 5 suggestions** (95% confidence, 5,000 users).
 
 Each simulated user is a real MovieLens user from the test split, which no earlier stage touched:
 
@@ -115,11 +140,11 @@ Each simulated user is a real MovieLens user from the test split, which no earli
 
 | Method | Hit within 1 | Hit within 5 | Hit within 10 |
 |---|---:|---:|---:|
-| Quick picks (ranking model) | 43.6% | 77.0% | 86.6% |
-| Quick picks (Stage 1 method) | 40.1% | 73.1% | 83.5% |
-| Most popular films | 34.5% | 68.2% | 78.3% |
+| Quick picks (ranking model) | 45.0% | 77.9% | 86.9% |
+| Quick picks (Stage 1 method) | 39.8% | 73.3% | 83.2% |
+| Most popular films | 36.4% | 70.1% | 78.3% |
 
-Compared user by user, the ranking model gets 4.0 ± 1.3 more points within 5 suggestions than Stage 1. Full results are in [results/stage4_simulation.md](results/stage4_simulation.md). To reproduce them, with no API calls:
+Compared user by user, the ranking model gets 4.6 ± 1.3 more points within 5 suggestions than Stage 1. Full results are in [results/stage4_simulation.md](results/stage4_simulation.md). To reproduce them, with no API calls:
 
 ```bash
 .venv/Scripts/python -m pipeline.simulate
@@ -148,7 +173,7 @@ The tools run the same code as the app and never call Claude, so they cost nothi
 
 The image built from the root `Dockerfile` serves the app, the API and the MCP server on one port. To host it you need:
 
-1. **A PostgreSQL database with the pgvector extension.** Most managed PostgreSQL services offer it. The catalog takes about 100 MB. Load it from the machine where you built the data:
+1. **A PostgreSQL database with the pgvector extension.** Most managed PostgreSQL services offer it. The catalog takes about 130 MB. Load it from the machine where you built the data:
 
    ```bash
    DATABASE_URL=<hosted database URL> .venv/Scripts/python -m pipeline.load_db
@@ -231,7 +256,7 @@ npm test
 This is a free, non-commercial project.
 
 - [MovieLens 32M](https://grouplens.org/datasets/movielens/32m/) and the [Tag Genome 2021](https://grouplens.org/datasets/movielens/tag-genome-2021/) by GroupLens. Harper and Konstan (2015), The MovieLens Datasets: History and Context, ACM TiiS 5(4). Kotkov et al. (2021), Revisiting the tag relevance prediction problem, SIGIR. Vig et al. (2012), The tag genome, ACM TiiS 2(3). The Tag Genome is licensed under CC BY-NC 3.0.
-- [Wikidata](https://www.wikidata.org/) (CC0) and [Wikipedia](https://en.wikipedia.org/) (CC BY-SA).
+- [Wikidata](https://www.wikidata.org/) (CC0) and [Wikipedia](https://en.wikipedia.org/) (CC BY-SA), with page views from the [Wikimedia pageviews API](https://wikitech.wikimedia.org/wiki/Analytics/AQS/Pageviews) (CC0).
 
 GroupLens and the University of Minnesota do not endorse this project.
 
@@ -242,4 +267,5 @@ GroupLens and the University of Minnesota do not endorse this project.
 - [ ] Stage 2: Claude conversation (built and tested with a stand-in for Claude; waiting on a real evaluation)
 - [x] Stage 3: PyTorch ranking model
 - [ ] Stage 4: Simulated-user evaluation (quick picks measured; the Claude comparison is waiting on an API key)
-- [ ] Stage 5: Public launch (ready to host, with spending and rate limits and an MCP server; not hosted yet)
+- [x] Stage 5: Public launch, at https://tonights-pick.fly.dev, with spending and rate limits and an MCP server
+- [x] Stage 6: Catalog brought up to this year, with films from MovieLens and Wikidata

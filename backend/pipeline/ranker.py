@@ -26,9 +26,11 @@ from torch import nn
 
 from app.ranker import TRAINED_MAX_FAVOURITES
 from app.recommend import POPULARITY_WEIGHT
-from pipeline.catalog import PROCESSED_DIR, popularity_scores
+from pipeline import themes
+from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 from pipeline.evaluate import (
+    BATCH_USERS,
     EVAL_USERS,
     PROFILE_SIZES,
     RESULTS_DIR,
@@ -61,14 +63,23 @@ class TrainingSettings:
     learning_rate: float = 1e-3
     weight_decay: float = 1e-5
     max_epochs: int = 40
-    patience: int = 3
+    # The held-out score dips for a few epochs at a time, more so with the Stage 6 catalog,
+    # where training stopped at epoch 2 of a run that kept improving until about epoch 14.
+    patience: int = 5
 
 
 class Ranker(nn.Module):
-    def __init__(self, features: torch.Tensor, settings: TrainingSettings):
+    def __init__(
+        self, features: torch.Tensor, settings: TrainingSettings, rated: torch.Tensor | None = None
+    ):
         super().__init__()
         films, feature_count = features.shape
         self.register_buffer("features", features)
+        # Films with no ratings never appear in training: always ranking them below what people
+        # liked would teach the model they're bad. Their bias is predicted afterwards.
+        self.register_buffer(
+            "rated", rated if rated is not None else torch.ones(films, dtype=torch.bool)
+        )
         self.input_projection = nn.Linear(feature_count, settings.dim)
         self.output_projection = nn.Linear(feature_count, settings.dim)
         # Corrections start at zero, so training begins from what the features alone predict.
@@ -134,7 +145,8 @@ def _loss(
     hidden = torch.zeros(len(users), films, device=device)
     hidden[_segments([user.hidden for user in users], device)] = 1.0
 
-    log_probs = torch.log_softmax(model(favourites, mask).masked_fill(seen, SEEN_PENALTY), dim=1)
+    left_out = seen | ~model.rated
+    log_probs = torch.log_softmax(model(favourites, mask).masked_fill(left_out, SEEN_PENALTY), dim=1)
     return (-(log_probs * hidden).sum(dim=1) / hidden.sum(dim=1)).mean()
 
 
@@ -155,6 +167,63 @@ def export(model: Ranker) -> dict[str, np.ndarray]:
         return {name: value.detach().cpu().numpy().astype(np.float32) for name, value in arrays.items()}
 
 
+BIAS_ALPHAS = (1.0, 10.0, 100.0, 1000.0)
+
+
+def fit_bias_model(x: np.ndarray, bias: np.ndarray, seed: int = SEED) -> tuple[tuple, float]:
+    """Ridge regression from a film's predictors to its learned bias, with the strength chosen
+    on a tenth of the films held out. Returns the model refitted on every film, and the
+    held-out R²."""
+    order = np.random.default_rng(seed).permutation(len(bias))
+    held, fitted = order[: len(bias) // 10], order[len(bias) // 10 :]
+
+    def r_squared(model: tuple, rows: np.ndarray) -> float:
+        residual = bias[rows] - predict_bias(model, x[rows])
+        return float(1 - residual.var() / bias[rows].var())
+
+    scores = {alpha: r_squared(themes.fit_ridge(x[fitted], bias[fitted, None], alpha), held)
+              for alpha in BIAS_ALPHAS}
+    alpha = max(scores, key=scores.get)
+    return themes.fit_ridge(x, bias[:, None], alpha), scores[alpha]
+
+
+def predict_bias(model: tuple, x: np.ndarray) -> np.ndarray:
+    weights, intercept = model
+    return (x @ weights + intercept)[:, 0]
+
+
+def with_unrated_bias(
+    exported: dict[str, np.ndarray], rated: np.ndarray, bias_inputs: np.ndarray
+) -> tuple[dict[str, np.ndarray], float | None]:
+    """Give films without ratings a bias predicted from their page views and features, by a
+    model fitted on the rated films' learned biases. Returns the held-out R² too."""
+    if rated.all():
+        return exported, None
+    model, r2 = fit_bias_model(bias_inputs[rated], exported["bias"][rated])
+    bias = exported["bias"].copy()
+    bias[~rated] = predict_bias(model, bias_inputs[~rated])
+    return exported | {"bias": bias.astype(np.float32)}, r2
+
+
+def bias_inputs(features: np.ndarray, monthly_views: np.ndarray) -> np.ndarray:
+    """What a film's bias is predicted from: its page views on a log scale, and its features."""
+    views = np.log1p(monthly_views.astype(np.float32))[:, None]
+    return np.concatenate([(views - views.mean()) / views.std(), features], axis=1)
+
+
+def leaving_out(scorer: Scorer, films: np.ndarray) -> Scorer:
+    """The same scores, with the given films never ranked."""
+    if not films.any():
+        return scorer
+
+    def score(profiles: list[np.ndarray]) -> np.ndarray:
+        scores = scorer(profiles).astype(np.float64)
+        scores[:, films] = -np.inf
+        return scores
+
+    return score
+
+
 def mean_ndcg(scorer: Scorer, users: list[EvalUser]) -> float:
     return float(np.mean([evaluate(scorer, users, size).ndcg.mean() for size in PROFILE_SIZES]))
 
@@ -167,11 +236,19 @@ def fit(
     device: torch.device,
     seed: int = SEED,
     log=print,
+    rated: np.ndarray | None = None,
+    unrated_bias_inputs: np.ndarray | None = None,
 ) -> tuple[dict[str, np.ndarray], list[dict[str, float]]]:
-    """Train until the held-out users stop improving, and return the best model's export."""
+    """Train until the held-out users stop improving, and return the best model's export.
+
+    Films where rated is False are left out of training and of early stopping, which nobody's
+    ratings can judge. The best model's biases for them are then predicted from
+    unrated_bias_inputs.
+    """
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    model = Ranker(torch.from_numpy(features), settings).to(device)
+    rated = np.ones(features.shape[0], dtype=bool) if rated is None else rated
+    model = Ranker(torch.from_numpy(features), settings, torch.from_numpy(rated)).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=settings.learning_rate, weight_decay=settings.weight_decay
     )
@@ -191,7 +268,7 @@ def fit(
             losses.append(loss.item())
 
         exported = export(model)
-        score = mean_ndcg(ranker_scorer(exported), stopping_users)
+        score = mean_ndcg(leaving_out(ranker_scorer(exported), ~rated), stopping_users)
         history.append(
             {
                 "epoch": epoch,
@@ -210,6 +287,8 @@ def fit(
             stale += 1
             if stale >= settings.patience:
                 break
+    if not rated.all():
+        best, _ = with_unrated_bias(best, rated, unrated_bias_inputs)
     return best, history
 
 
@@ -242,10 +321,117 @@ def table(summaries: dict[str, dict[int, dict]], metric: str, number_format: str
     return "\n".join([header, "|---|" + "---:|" * len(PROFILE_SIZES), *rows])
 
 
+# The new-film check retrains as if MovieLens films from this year on had no ratings.
+NEW_FILM_CHECK_FROM = 2021
+CHECK_TOP = 100
+SHOWN_PICKS = 3
+
+
+def hidden_ranks(
+    scorer: Scorer, users: list[EvalUser], size: int, of_interest: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """For each film of interest a user liked later: its position among that user's candidates
+    as a share (0 is first), and whether it's in their top CHECK_TOP."""
+    shares, hits = [], []
+    for start in range(0, len(users), BATCH_USERS):
+        batch = users[start : start + BATCH_USERS]
+        scores = scorer([user.favourites[:size] for user in batch]).astype(np.float64)
+        for row, user in enumerate(batch):
+            scores[row, user.seen] = -np.inf
+            candidates = np.isfinite(scores[row]).sum()
+            for target in user.hidden[of_interest[user.hidden]]:
+                above = int((scores[row] > scores[row, target]).sum())
+                shares.append(above / candidates)
+                hits.append(above < CHECK_TOP)
+    return np.array(shares), np.array(hits)
+
+
+def share_shown(scorer: Scorer, users: list[EvalUser], size: int, films: np.ndarray) -> float:
+    """The share of users who get at least one of the given films among their picks."""
+    shown = 0
+    for start in range(0, len(users), BATCH_USERS):
+        batch = users[start : start + BATCH_USERS]
+        scores = scorer([user.favourites[:size] for user in batch]).astype(np.float64)
+        for row, user in enumerate(batch):
+            scores[row, user.seen] = -np.inf
+        top = np.argpartition(-scores, SHOWN_PICKS, axis=1)[:, :SHOWN_PICKS]
+        shown += int(films[top].any(axis=1).sum())
+    return shown / len(users)
+
+
+def unrated_report(
+    films: pl.DataFrame,
+    ratings: pl.DataFrame,
+    movie_ids: np.ndarray,
+    features: np.ndarray,
+    rated: np.ndarray,
+    unrated_inputs: np.ndarray,
+    exported: dict[str, np.ndarray],
+    val_users: list[EvalUser],
+    settings: TrainingSettings,
+    device: torch.device,
+    run_check: bool,
+) -> list[str]:
+    """Report lines on the films without ratings: how their bias was predicted, how often
+    they're picked, and how well films are ranked when they have no ratings yet."""
+    size = VARIETY_PROFILE_SIZE
+    _, r2 = with_unrated_bias(exported, rated, unrated_inputs)
+    shown = share_shown(ranker_scorer(exported), val_users, size, ~rated)
+    lines = [
+        "## Films without ratings",
+        "",
+        (f"{(~rated).sum():,} films from Wikidata, released after MovieLens ends, have no "
+         f"ratings. They're left out of training, and their bias is predicted from Wikipedia "
+         f"page views and their features by a ridge regression fitted on the rated films' "
+         f"learned biases (R² {r2:.2f} on rated films held out). With {size} favourites, "
+         f"{shown:.1%} of validation users get at least one of them among their "
+         f"{SHOWN_PICKS} picks. Validation can't reward these picks, since nobody rated them."),
+        "",
+    ]
+    if not run_check:
+        return lines
+
+    years = films["year"].fill_null(0).to_numpy()
+    pretend = rated & (films["source"] == "movielens").to_numpy() & (years >= NEW_FILM_CHECK_FROM)
+    train = build_users(
+        ratings.filter(pl.col("split") == "train", ~pl.col("movie_id").is_in(movie_ids[pretend])),
+        movie_ids, 10**9, seed=SEED,
+    )
+    print(f"new-film check: retraining without ratings for {pretend.sum():,} films from "
+          f"{NEW_FILM_CHECK_FROM} on", flush=True)
+    as_new, _ = fit(
+        features, train[STOPPING_USERS:], train[:STOPPING_USERS], settings, device,
+        log=lambda line: print(f"new-film check {line}", flush=True),
+        rated=rated & ~pretend, unrated_bias_inputs=unrated_inputs,
+    )
+    warm_shares, warm_hits = hidden_ranks(ranker_scorer(exported), val_users, size, pretend)
+    new_shares, new_hits = hidden_ranks(ranker_scorer(as_new), val_users, size, pretend)
+    warm_ndcg = evaluate(ranker_scorer(exported), val_users, size).ndcg.mean()
+    new_ndcg = evaluate(ranker_scorer(as_new), val_users, size).ndcg.mean()
+    candidates = len(movie_ids)
+    return lines + [
+        (f"To estimate how well films without ratings are ranked, the model was trained again "
+         f"as if the {pretend.sum():,} MovieLens films from {NEW_FILM_CHECK_FROM} on had no "
+         f"ratings, then compared with the full model on the {warm_hits.size:,} times a "
+         f"validation user liked one of them after their {size} favourites:"),
+        "",
+        f"| Model | Liked film in the top {CHECK_TOP} | Median position | NDCG@10, all films |",
+        "|---|---:|---:|---:|",
+        (f"| Trained with their ratings | {warm_hits.mean():.1%} | "
+         f"top {np.median(warm_shares):.1%} | {warm_ndcg:.4f} |"),
+        (f"| As if they had no ratings | {new_hits.mean():.1%} | "
+         f"top {np.median(new_shares):.1%} | {new_ndcg:.4f} |"),
+        f"| Random order | {CHECK_TOP / candidates:.1%} | top 50% | |",
+        "",
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--max-epochs", type=int, default=TrainingSettings.max_epochs)
     parser.add_argument("--train-users", type=int, help="train on at most this many users")
+    parser.add_argument("--skip-new-film-check", action="store_true",
+                        help="don't retrain to test how well films without ratings are ranked")
     arguments = parser.parse_args()
     settings = TrainingSettings(max_epochs=arguments.max_epochs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -254,7 +440,14 @@ def main() -> None:
     movie_ids = films["movie_id"].to_numpy()
     raw_genome = np.load(PROCESSED_DIR / "genome.npy")
     text = np.load(PROCESSED_DIR / "text_embeddings.npy")
-    popularity = popularity_scores(films["liked_count"].to_numpy())
+    popularity = film_popularity(films)
+    expanded = "source" in films.columns
+    rated = (films["source"] != "wikidata").to_numpy() if expanded else np.ones(len(films), bool)
+    monthly_views = (
+        films["monthly_views"].to_numpy() if expanded else np.zeros(len(films), np.float32)
+    )
+    features = film_features(raw_genome, text)
+    unrated_inputs = bias_inputs(features, monthly_views)
 
     ratings = pl.read_parquet(PROCESSED_DIR / "ratings.parquet")
     started = time.perf_counter()
@@ -270,10 +463,15 @@ def main() -> None:
     )
 
     exported, history = fit(
-        film_features(raw_genome, text), train_users, stopping_users, settings, device,
-        log=lambda line: print(line, flush=True),
+        features, train_users, stopping_users, settings, device,
+        log=lambda line: print(line, flush=True), rated=rated, unrated_bias_inputs=unrated_inputs,
     )
     np.savez(RANKER_PATH, movie_ids=movie_ids, **exported)
+    unrated_section = (
+        unrated_report(films, ratings, movie_ids, features, rated, unrated_inputs, exported,
+                       val_users, settings, device, run_check=not arguments.skip_new_film_check)
+        if expanded else []
+    )
 
     baseline_name = "Tag Genome + popularity (Stage 1)"
     summaries = {
@@ -327,6 +525,7 @@ def main() -> None:
             "",
             table(summaries, "distinct_first_picks", "d"),
             "",
+            *unrated_section,
             "## Training",
             "",
             (f"Settings: {settings}. Device: {device}."),

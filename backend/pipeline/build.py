@@ -1,6 +1,10 @@
-"""Run every pipeline step, from downloading the datasets to loading the database."""
+"""Run every pipeline step, from downloading the datasets to loading the database.
 
-from pipeline import catalog, download, embed, enrich, load_db
+The ranking model is trained separately with pipeline.ranker, between expand and load_db,
+because it needs PyTorch.
+"""
+
+from pipeline import catalog, download, embed, enrich, expand, load_db
 
 
 def main() -> None:
@@ -8,6 +12,7 @@ def main() -> None:
     catalog.main()
     enrich.main()
     embed.main()
+    expand.main()
     load_db.main()
 
 
