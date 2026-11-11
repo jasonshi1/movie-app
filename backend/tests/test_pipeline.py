@@ -15,6 +15,7 @@ from pipeline.evaluate import (
     ndcg_and_recall,
     similarity_scorer,
 )
+from pipeline.posters import clean_url, resolve_posters
 
 
 @pytest.mark.parametrize(
@@ -151,3 +152,35 @@ def test_apply_schema_fails_loudly_when_scripts_are_missing(monkeypatch, tmp_pat
 
     with pytest.raises(FileNotFoundError):
         load_db.apply_schema(None)
+
+
+def test_resolve_posters_follows_redirects_and_drops_tracking_parameters():
+    query = {
+        "redirects": [{"from": "Alien (film)", "to": "Alien (1979 film)"}],
+        "pages": {
+            "1": {
+                "title": "Alien (1979 film)",
+                "thumbnail": {
+                    "source": "https://upload.wikimedia.org/wikipedia/en/c/c3/Alien_movie_poster.jpg"
+                    "?utm_source=en.wikipedia.org&utm_campaign=api"
+                },
+            },
+            "-1": {"title": "No Image Film"},
+        },
+    }
+
+    resolved = resolve_posters(query, ["Alien (film)", "No Image Film", "Nonexistent"])
+
+    assert resolved == {
+        "Alien (film)": "https://upload.wikimedia.org/wikipedia/en/c/c3/Alien_movie_poster.jpg",
+        "No Image Film": "",
+        "Nonexistent": "",
+    }
+
+
+def test_posters_only_come_from_hosts_the_app_allows():
+    assert clean_url("https://thumb.wikimedia.org/a/250px-b.png?x=1") == (
+        "https://thumb.wikimedia.org/a/250px-b.png"
+    )
+    assert clean_url("http://upload.wikimedia.org/a.png") == ""
+    assert clean_url("https://example.com/a.png") == ""

@@ -140,11 +140,12 @@ To add films released since the last run, from `backend`:
 
 ```bash
 .venv/Scripts/python -m pipeline.expand
+.venv/Scripts/python -m pipeline.posters
 .venv/Scripts/python -m pipeline.ranker
 .venv/Scripts/python -m pipeline.recent_pick
 ```
 
-The last step checks the new-release pick again and says if its weight in `app/recommend.py` should change. Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
+`pipeline.posters` finds each new film's poster. The last step checks the new-release pick again and says if its weight in `app/recommend.py` should change. Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
 
 ## Simulated users
 
@@ -276,6 +277,7 @@ This is a free, non-commercial project.
 
 - [MovieLens 32M](https://grouplens.org/datasets/movielens/32m/) and the [Tag Genome 2021](https://grouplens.org/datasets/movielens/tag-genome-2021/) by GroupLens. Harper and Konstan (2015), The MovieLens Datasets: History and Context, ACM TiiS 5(4). Kotkov et al. (2021), Revisiting the tag relevance prediction problem, SIGIR. Vig et al. (2012), The tag genome, ACM TiiS 2(3). The Tag Genome is licensed under CC BY-NC 3.0.
 - [Wikidata](https://www.wikidata.org/) (CC0) and [Wikipedia](https://en.wikipedia.org/) (CC BY-SA), with page views from the [Wikimedia pageviews API](https://wikitech.wikimedia.org/wiki/Analytics/AQS/Pageviews) (CC0).
+- Posters are the lead image of each film's English Wikipedia article, found by `pipeline.posters` for 98% of films and loaded from Wikimedia's servers. Most are copyrighted by their studios and used on Wikipedia under fair use; the app shows them small, beside the title, to identify the film, and credits Wikipedia. Old films' posters are often in the public domain. Visitors' browsers fetch them from Wikimedia directly, without sending which page they came from.
 
 GroupLens and the University of Minnesota do not endorse this project.
 

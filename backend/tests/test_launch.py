@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
 from app import conversations, main
+from pipeline.posters import POSTER_HOSTS
 
 
 def test_api_responses_carry_security_headers(empty_catalog):
@@ -13,6 +14,12 @@ def test_api_responses_carry_security_headers(empty_catalog):
 
     assert headers["X-Content-Type-Options"] == "nosniff"
     assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+    image_sources = next(
+        part for part in headers["Content-Security-Policy"].split(";") if "img-src" in part
+    ).split()[1:]
+    assert sorted(image_sources) == sorted(
+        ["'self'", "data:", *(f"https://{host}" for host in POSTER_HOSTS)]
+    )
 
 
 def test_the_built_app_is_served_alongside_the_api(tmp_path):

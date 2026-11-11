@@ -47,11 +47,13 @@ RECENT_POPULARITY_WEIGHT = 32.0
 # The columns film_card() reads, in order, from a query that aliases films as "film".
 FILM_CARD_COLUMNS = (
     "film.movie_id, film.title, film.year, film.genres, film.directors, film.runtime,"
-    " film.certification, film.wikipedia_title"
+    " film.certification, film.wikipedia_title, film.poster_url"
 )
+# Where the columns a query selects after FILM_CARD_COLUMNS start.
+CARD_WIDTH = 9
 
 _SEARCH = """
-SELECT movie_id, title, year, directors
+SELECT movie_id, title, year, directors, poster_url
 FROM films
 WHERE title ILIKE %(contains)s OR title %% %(query)s
 ORDER BY title ILIKE %(prefix)s DESC,
@@ -139,8 +141,14 @@ def search_films(query: str, limit: int) -> list[dict]:
             {"query": query, "contains": f"%{pattern}%", "prefix": f"{pattern}%", "limit": limit},
         ).fetchall()
     return [
-        {"movie_id": movie_id, "title": title, "year": year, "directors": directors}
-        for movie_id, title, year, directors in rows
+        {
+            "movie_id": movie_id,
+            "title": title,
+            "year": year,
+            "directors": directors,
+            "poster_url": poster_url,
+        }
+        for movie_id, title, year, directors, poster_url in rows
     ]
 
 
@@ -152,7 +160,9 @@ def shared_themes(taste: list[float], film: list[float], tags: list[tuple[int, s
 
 def film_card(row: tuple) -> dict:
     """Describe a film for display, from a row starting with FILM_CARD_COLUMNS."""
-    movie_id, title, year, genres, directors, runtime, certification, wikipedia_title = row[:8]
+    movie_id, title, year, genres, directors, runtime, certification, wikipedia_title, poster_url = (
+        row[:CARD_WIDTH]
+    )
     return {
         "movie_id": movie_id,
         "title": title,
@@ -167,6 +177,7 @@ def film_card(row: tuple) -> dict:
             else None
         ),
         "where_to_watch_url": f"https://www.justwatch.com/ca/search?q={quote(title)}",
+        "poster_url": poster_url,
     }
 
 
@@ -238,8 +249,8 @@ def _choose(
         return []
     taken = {row[0] for row in chosen}
     rows = [row for row in rows if row[0] not in taken]
-    candidates = [(row[1], _genome(row[8])) for row in rows]
-    kept = avoid + [(row[1], _genome(row[8])) for row in chosen]
+    candidates = [(row[1], _genome(row[CARD_WIDTH])) for row in rows]
+    kept = avoid + [(row[1], _genome(row[CARD_WIDTH])) for row in chosen]
     return [rows[index] for index in choose_distinct(candidates, count, kept)]
 
 
@@ -300,7 +311,7 @@ def pick_films(
         tags = conn.execute(_DISPLAYABLE_TAGS).fetchall()
         picks = []
         for row in rows:
-            film_vector = row[8]
+            film_vector, taste_vector = row[CARD_WIDTH], row[CARD_WIDTH + 1]
             similar_to = conn.execute(
                 _CLOSEST_FAVOURITE, {"liked": liked, "film": film_vector}
             ).fetchone()[0]
@@ -309,7 +320,7 @@ def pick_films(
                     "film": film_card(row),
                     "reason": {
                         "similar_to": similar_to,
-                        "themes": shared_themes(json.loads(row[9]), json.loads(film_vector), tags),
+                        "themes": shared_themes(json.loads(taste_vector), json.loads(film_vector), tags),
                     },
                     "recent": recent_from is not None
                     and row[2] is not None

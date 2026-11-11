@@ -12,6 +12,7 @@ from app.ranker import encoder_to_bytes
 from app.recommend import vector_literal
 from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
+from pipeline.posters import load_posters
 from pipeline.tag_policy import is_displayable
 
 INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
@@ -54,6 +55,8 @@ def main() -> None:
     popularity = film_popularity(films)
     tags = json.loads((PROCESSED_DIR / "tags.json").read_text(encoding="utf-8"))
     ranker = load_ranker(films["movie_id"].to_numpy())
+    # Without pipeline.posters having run, films load without posters.
+    posters = load_posters()
 
     with psycopg.connect(settings.database_url) as conn:
         apply_schema(conn)
@@ -67,8 +70,8 @@ def main() -> None:
             )
             with cursor.copy(
                 "COPY films (movie_id, imdb_id, title, year, genres, directors, cast_members,"
-                " runtime, certification, wikipedia_title, description, popularity, genome, embedding,"
-                " ranker_input, ranker_output)"
+                " runtime, certification, wikipedia_title, poster_url, description, popularity,"
+                " genome, embedding, ranker_input, ranker_output)"
                 " FROM STDIN"
             ) as copy:
                 for index, row in enumerate(films.iter_rows(named=True)):
@@ -84,6 +87,7 @@ def main() -> None:
                             row["runtime"],
                             row["certification"],
                             row["wikipedia_title"],
+                            posters.get(row["wikipedia_title"] or "") or None,
                             row["description"],
                             float(popularity[index]),
                             vector_literal(genome[index]),
