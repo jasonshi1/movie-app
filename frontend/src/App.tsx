@@ -9,12 +9,17 @@ import type { FilmMatch, PickedFilm, Preferences } from "./types";
 type Pick = {
   film: PickedFilm;
   reason: { similar_to: string; themes: string[] };
+  // Released in the catalog's last three years.
+  recent: boolean;
 };
 
 type PickStatus = "idle" | "picking" | "none-left" | "too-fast" | "error";
 
 const SEARCH_DELAY_MS = 200;
 const PICK_COUNT = 3;
+// The last pick is a recent release. The ranker learned from MovieLens ratings, which end in
+// October 2023, so it would rarely choose a newer film otherwise.
+const RECENT_PICKS = 1;
 const COUNT_WORDS = ["none", "one", "two", "three", "four", "five"];
 
 const today = new Intl.DateTimeFormat(undefined, {
@@ -91,6 +96,7 @@ export default function App() {
   async function fetchPicks(
     rejectedIds: number[],
     count: number,
+    recent: number,
     showing: number[] = [],
   ): Promise<Pick[] | "none-left" | "too-fast"> {
     const response = await fetch("/api/pick", {
@@ -101,6 +107,7 @@ export default function App() {
         rejected: rejectedIds,
         count,
         showing,
+        recent,
       }),
     });
     if (response.status === 404) return "none-left";
@@ -112,7 +119,7 @@ export default function App() {
   async function pickFilms(rejectedIds: number[]) {
     setStatus("picking");
     try {
-      const result = await fetchPicks(rejectedIds, PICK_COUNT);
+      const result = await fetchPicks(rejectedIds, PICK_COUNT, RECENT_PICKS);
       if (result === "too-fast") {
         setStatus("too-fast");
         return;
@@ -131,15 +138,17 @@ export default function App() {
     void pickFilms(next);
   }
 
-  // Swap one pick for the next best film, keeping the others where they are.
-  async function replacePick(movieId: number) {
+  // Swap one pick for the next best film, keeping the others where they are. A recent film is
+  // swapped for another recent one.
+  async function replacePick(replaced: Pick) {
+    const movieId = replaced.film.movie_id;
     const next = [...rejected, movieId];
     const others = picks.map((pick) => pick.film.movie_id).filter((id) => id !== movieId);
     setRejected(next);
     setReplacing(movieId);
     setStatus("idle");
     try {
-      const result = await fetchPicks(next, 1, others);
+      const result = await fetchPicks(next, 1, replaced.recent ? 1 : 0, others);
       if (result === "too-fast") {
         setStatus("too-fast");
         return;
@@ -171,7 +180,10 @@ export default function App() {
         <h1>
           Tonight’s <em>Pick</em>
         </h1>
-        <p className="intro">Name a few films you love, and get three to choose from tonight.</p>
+        <p className="intro">
+          Name a few films you love, and get three to choose from tonight, one of them a new
+          release.
+        </p>
       </header>
 
       <main>
@@ -256,6 +268,7 @@ export default function App() {
               {picks.map((pick) => (
                 <li key={pick.film.movie_id}>
                   <article className="pick">
+                    {pick.recent && <p className="flag">New release</p>}
                     <h2>
                       <FilmTitle film={pick.film} />
                     </h2>
@@ -270,7 +283,7 @@ export default function App() {
                         type="button"
                         aria-label={`Not this one: ${pick.film.title}`}
                         disabled={busy}
-                        onClick={() => void replacePick(pick.film.movie_id)}
+                        onClick={() => void replacePick(pick)}
                       >
                         {replacing === pick.film.movie_id ? "Finding another…" : "Not this one"}
                       </button>

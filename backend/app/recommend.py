@@ -32,6 +32,18 @@ CANDIDATES_PER_PICK = 10
 TURNED_DOWN_SERIES = 20
 _ARTICLES = {"the", "a", "an"}
 
+# MovieLens ratings end in October 2023, so the ranker rarely picks a newer film by itself: 0.1%
+# of validation users get one among three picks. A pick can instead be asked to come from the
+# films released in the catalog's last RECENT_YEARS years (2024 to 2026 for a catalog that
+# reaches 2026).
+RECENT_YEARS = 3
+# Films that recent have no ratings, so the ranker only roughly knows how widely liked they are.
+# For the recent pick, a film's standing in its year times this weight is added to the ranker's
+# score: its percent rank on popularity, which comes from Wikipedia page views, among the films
+# from the same year. Page views run far higher in a film's first months, so popularity itself
+# would put this year's films ahead of everything else. See results/stage6_recent_pick.md.
+RECENT_POPULARITY_WEIGHT = 32.0
+
 # The columns film_card() reads, in order, from a query that aliases films as "film".
 FILM_CARD_COLUMNS = (
     "film.movie_id, film.title, film.year, film.genres, film.directors, film.runtime,"
@@ -48,17 +60,26 @@ ORDER BY title ILIKE %(prefix)s DESC,
 LIMIT %(limit)s
 """
 
-def _pick_query(cost: str) -> str:
+def _pick_query(cost: str, standing: bool = False) -> str:
     """Find the best films first, then fetch their details, best first. Lower cost is better.
+    With released_from set, only films from that year on are considered. With standing, the
+    cost can use standing.standing, each film's percent rank on popularity within its year.
 
     Selecting the details while sorting made PostgreSQL turn every film's genome into text,
     which took about 0.6 seconds instead of 0.01.
     """
+    standing_table = """
+standing AS (
+    SELECT movie_id, percent_rank() OVER (PARTITION BY year ORDER BY popularity) AS standing
+    FROM films WHERE year >= %(released_from)s::integer
+),""" if standing else ""
+    standing_join = " JOIN standing ON standing.movie_id = film.movie_id" if standing else ""
     return f"""
-WITH taste AS (SELECT avg(genome) AS vector FROM films WHERE movie_id = ANY(%(liked)s)),
+WITH taste AS (SELECT avg(genome) AS vector FROM films WHERE movie_id = ANY(%(liked)s)),{standing_table}
 best AS (
-    SELECT film.movie_id, {cost} AS cost FROM films AS film, taste
+    SELECT film.movie_id, {cost} AS cost FROM films AS film{standing_join}, taste
     WHERE taste.vector IS NOT NULL AND film.movie_id <> ALL(%(excluded)s)
+      AND (%(released_from)s::integer IS NULL OR film.year >= %(released_from)s::integer)
     ORDER BY cost, film.movie_id
     LIMIT %(count)s
 )
@@ -72,6 +93,11 @@ _PICK = _pick_query("-((1 - (film.genome <=> taste.vector)) + %(weight)s * film.
 # ranker_output ends with the film's bias and the taste vector ends with 1, so their inner
 # product is the ranker's score. pgvector's <#> is the negative inner product.
 _PICK_RANKED = _pick_query("film.ranker_output <#> %(ranker_taste)s::vector")
+# The brackets matter: PostgreSQL binds - more tightly than <#>.
+_PICK_RANKED_RECENT = _pick_query(
+    "(film.ranker_output <#> %(ranker_taste)s::vector) - %(recent_weight)s * standing.standing",
+    standing=True,
+)
 
 _RANKER = "SELECT encoder FROM ranker"
 _FAVOURITE_INPUTS = """
@@ -89,6 +115,8 @@ LIMIT 1
 _DISPLAYABLE_TAGS = "SELECT position, tag FROM genome_tags WHERE displayable"
 
 _AVOIDED = "SELECT title, genome::text FROM films WHERE movie_id = ANY(%(avoided)s)"
+
+_NEWEST_YEAR = "SELECT max(year) FROM films"
 
 
 def vector_literal(vector: np.ndarray) -> str:
@@ -197,43 +225,77 @@ def choose_distinct(
     return chosen + skipped[: count - len(chosen)]
 
 
+def _genome(text: str) -> np.ndarray:
+    return np.array(json.loads(text), dtype=np.float32)
+
+
+def _choose(
+    rows: list[tuple], count: int, avoid: list[tuple[str, np.ndarray]], chosen: list[tuple]
+) -> list[tuple]:
+    """Up to count pick query rows, best first, that aren't already chosen and aren't from the
+    series of a chosen film or one to avoid (see choose_distinct)."""
+    if count <= 0:
+        return []
+    taken = {row[0] for row in chosen}
+    rows = [row for row in rows if row[0] not in taken]
+    candidates = [(row[1], _genome(row[8])) for row in rows]
+    kept = avoid + [(row[1], _genome(row[8])) for row in chosen]
+    return [rows[index] for index in choose_distinct(candidates, count, kept)]
+
+
 def pick_films(
-    liked: list[int], rejected: list[int], count: int, showing: Sequence[int] = ()
+    liked: list[int],
+    rejected: list[int],
+    count: int,
+    showing: Sequence[int] = (),
+    recent: int = 0,
 ) -> list[dict]:
     """Return up to count of the best films the person hasn't named or rejected, best first,
     each with the reason: the closest favourite and the themes they share.
+
+    The last `recent` of them are the best films released in the catalog's last RECENT_YEARS
+    years, counting each one's standing in its year as well (RECENT_POPULARITY_WEIGHT), or the
+    best of any year left once there are no more of those. Each pick says whether its film is
+    that recent.
 
     Films from the same series as one already picked are skipped, and so are films from the
     series of the picks in showing (still on screen, and left out) and of the most recently
     rejected films. So with nothing turned down, the first is always the ranker's best film.
     """
     with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
+        newest = conn.execute(_NEWEST_YEAR).fetchone()[0]
+        recent_from = None if newest is None else newest - RECENT_YEARS + 1
         parameters = {
             "liked": liked,
             "excluded": liked + rejected + list(showing),
             "weight": POPULARITY_WEIGHT,
-            "count": count * CANDIDATES_PER_PICK,
         }
         taste = ranker_taste(conn, liked)
-        if taste is None:
-            rows = conn.execute(_PICK, parameters).fetchall()
-        else:
-            rows = conn.execute(
-                _PICK_RANKED, parameters | {"ranker_taste": vector_literal(taste)}
-            ).fetchall()
-        if not rows:
-            return []
+        if taste is not None:
+            parameters["ranker_taste"] = vector_literal(taste)
+            parameters["recent_weight"] = RECENT_POPULARITY_WEIGHT
 
-        def genome(text: str) -> np.ndarray:
-            return np.array(json.loads(text), dtype=np.float32)
+        def best(picks: int, released_from: int | None) -> list[tuple]:
+            if taste is None:
+                query = _PICK
+            else:
+                query = _PICK_RANKED if released_from is None else _PICK_RANKED_RECENT
+            limits = {"count": picks * CANDIDATES_PER_PICK, "released_from": released_from}
+            return conn.execute(query, parameters | limits).fetchall()
+
+        any_year = best(count, None)
+        if not any_year:
+            return []
 
         avoided_ids = list(showing) + rejected[-TURNED_DOWN_SERIES:]
         avoided = [
-            (title, genome(vector))
+            (title, _genome(vector))
             for title, vector in conn.execute(_AVOIDED, {"avoided": avoided_ids}).fetchall()
         ]
-        candidates = [(row[1], genome(row[8])) for row in rows]
-        rows = [rows[index] for index in choose_distinct(candidates, count, avoided)]
+        rows = _choose(any_year, count - recent, avoided, [])
+        if recent and recent_from is not None:
+            rows += _choose(best(recent, recent_from), recent, avoided, rows)
+        rows += _choose(any_year, count - len(rows), avoided, rows)
 
         tags = conn.execute(_DISPLAYABLE_TAGS).fetchall()
         picks = []
@@ -249,6 +311,9 @@ def pick_films(
                         "similar_to": similar_to,
                         "themes": shared_themes(json.loads(row[9]), json.loads(film_vector), tags),
                     },
+                    "recent": recent_from is not None
+                    and row[2] is not None
+                    and row[2] >= recent_from,
                 }
             )
     return picks

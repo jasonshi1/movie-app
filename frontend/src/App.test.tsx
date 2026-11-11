@@ -11,12 +11,12 @@ afterEach(() => {
 
 const MATRIX = { movie_id: 1, title: "The Matrix", year: 1999, directors: ["The Wachowskis"] };
 
-function pickOf(movieId: number, title: string) {
+function pickOf(movieId: number, title: string, recent = false) {
   return {
     film: {
       movie_id: movieId,
       title,
-      year: 1982,
+      year: recent ? 2024 : 1982,
       genres: ["Sci-Fi"],
       directors: ["Ridley Scott"],
       runtime: 117,
@@ -25,17 +25,25 @@ function pickOf(movieId: number, title: string) {
       where_to_watch_url: "https://www.justwatch.com/ca/search?q=Blade%20Runner",
     },
     reason: { similar_to: "The Matrix", themes: ["dystopia", "cyberpunk"] },
+    recent,
   };
 }
 
-function picksOf(...films: [number, string][]) {
-  return { picks: films.map(([movieId, title]) => pickOf(movieId, title)) };
+function picksOf(...films: [number, string, boolean?][]) {
+  return { picks: films.map(([movieId, title, recent]) => pickOf(movieId, title, recent)) };
 }
 
-const THREE = picksOf([2, "Blade Runner"], [3, "Gattaca"], [4, "Alien"]);
+// The last pick is a recent release, as the server answers when asked for one.
+const THREE = picksOf([2, "Blade Runner"], [3, "Gattaca"], [4, "Dune: Part Two", true]);
 
 type Reply = { status: number; body: unknown };
-type PickBody = { liked: number[]; rejected: number[]; count: number; showing: number[] };
+type PickBody = {
+  liked: number[];
+  rejected: number[];
+  count: number;
+  showing: number[];
+  recent: number;
+};
 
 function stubApi(pickReplies: Reply[], chat = false) {
   const pickBodies: PickBody[] = [];
@@ -88,10 +96,22 @@ it("adds a searched film and shows three picks, each with its reason", async () 
   fireEvent.click(pickButton());
 
   expect(await screen.findByRole("heading", { name: "Blade Runner (1982)" })).toBeTruthy();
-  expect(titles()).toEqual(["Blade Runner (1982)", "Gattaca (1982)", "Alien (1982)"]);
+  expect(titles()).toEqual(["Blade Runner (1982)", "Gattaca (1982)", "Dune: Part Two (2024)"]);
   expect(screen.getAllByText(/Shared themes: dystopia, cyberpunk\./)).toHaveLength(3);
   expect(screen.getByText("Tonight · three to choose from")).toBeTruthy();
-  expect(bodies).toEqual([{ liked: [1], rejected: [], count: 3, showing: [] }]);
+  expect(bodies).toEqual([{ liked: [1], rejected: [], count: 3, showing: [], recent: 1 }]);
+});
+
+it("marks only the recent release as new", async () => {
+  stubApi([{ status: 200, body: THREE }]);
+  render(<App />);
+
+  await addMatrixAsFavourite();
+  fireEvent.click(pickButton());
+
+  const flag = await screen.findByText("New release");
+  expect(screen.getAllByText("New release")).toHaveLength(1);
+  expect(flag.closest("article")?.querySelector("h2")?.textContent).toBe("Dune: Part Two (2024)");
 });
 
 it("replaces just the pick that's turned down and remembers it", async () => {
@@ -107,8 +127,25 @@ it("replaces just the pick that's turned down and remembers it", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Not this one: Blade Runner" }));
 
   expect(await screen.findByRole("heading", { name: "Brazil (1982)" })).toBeTruthy();
-  expect(titles()).toEqual(["Brazil (1982)", "Gattaca (1982)", "Alien (1982)"]);
-  expect(bodies[1]).toEqual({ liked: [1], rejected: [2], count: 1, showing: [3, 4] });
+  expect(titles()).toEqual(["Brazil (1982)", "Gattaca (1982)", "Dune: Part Two (2024)"]);
+  expect(bodies[1]).toEqual({ liked: [1], rejected: [2], count: 1, showing: [3, 4], recent: 0 });
+});
+
+it("replaces a turned-down recent release with another one", async () => {
+  const bodies = stubApi([
+    { status: 200, body: THREE },
+    { status: 200, body: picksOf([5, "Sinners", true]) },
+  ]);
+  render(<App />);
+  await addMatrixAsFavourite();
+  fireEvent.click(pickButton());
+  await screen.findByRole("heading", { name: "Blade Runner (1982)" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Not this one: Dune: Part Two" }));
+
+  expect(await screen.findByRole("heading", { name: "Sinners (2024)" })).toBeTruthy();
+  expect(titles()).toEqual(["Blade Runner (1982)", "Gattaca (1982)", "Sinners (2024)"]);
+  expect(bodies[1]).toEqual({ liked: [1], rejected: [4], count: 1, showing: [2, 3], recent: 1 });
 });
 
 it("drops a turned-down pick when there's nothing left to replace it", async () => {
@@ -120,7 +157,9 @@ it("drops a turned-down pick when there's nothing left to replace it", async () 
 
   fireEvent.click(screen.getByRole("button", { name: "Not this one: Gattaca" }));
 
-  await waitFor(() => expect(titles()).toEqual(["Blade Runner (1982)", "Alien (1982)"]));
+  await waitFor(() =>
+    expect(titles()).toEqual(["Blade Runner (1982)", "Dune: Part Two (2024)"]),
+  );
   expect(screen.getByText("Tonight · two to choose from")).toBeTruthy();
 });
 
@@ -138,7 +177,7 @@ it("swaps all three for three others", async () => {
 
   expect(await screen.findByRole("heading", { name: "Moon (1982)" })).toBeTruthy();
   expect(titles()).toEqual(["Brazil (1982)", "Moon (1982)", "Solaris (1982)"]);
-  expect(bodies[1]).toEqual({ liked: [1], rejected: [2, 3, 4], count: 3, showing: [] });
+  expect(bodies[1]).toEqual({ liked: [1], rejected: [2, 3, 4], count: 3, showing: [], recent: 1 });
 });
 
 it("says when there are no films left", async () => {

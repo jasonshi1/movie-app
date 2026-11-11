@@ -71,7 +71,7 @@ A ranking model built with PyTorch turns your favourites into a taste vector, wi
 
 The model is trained in PyTorch on a GPU. The app runs it with numpy and pgvector, so the server needs neither PyTorch nor a GPU. The reason shown with a pick still comes from Tag Genome themes, because people can read those.
 
-Quick picks show three films: the model's best, skipping any film from the same series as one already shown or one of the last 20 turned down. So a fan of *Toy Story* doesn't get three Star Wars films, and turning down *Star Wars IV* doesn't bring back *Star Wars VI*. Until something is turned down, the first pick is always the model's best film, so the results below apply to it. The simulated users further down go through the model's list one film at a time, so they don't measure the series rule. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
+Quick picks show three films. The first two are the model's best, and the third, marked "New release", is the best match from the catalog's last three years (see [The new-release pick](#the-new-release-pick)). Each skips any film from the same series as one already shown or one of the last 20 turned down. So a fan of *Toy Story* doesn't get three Star Wars films, and turning down *Star Wars IV* doesn't bring back *Star Wars VI*. Turning down a new release brings another one. Until something is turned down, the first pick is always the model's best film, so the results below apply to it. The simulated users further down go through the model's list one film at a time, so they don't measure the series rule or the new-release pick. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
 
 Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 106,781 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites, ranking all 13,248 films:
 
@@ -102,7 +102,7 @@ Full results are in [results/stage3_ranker.md](results/stage3_ranker.md) and [re
 
 - With only one favourite, the model (0.264) is only a little ahead of recommending the most popular films (0.252).
 - The conversation with Claude still searches with the Stage 1 taste profile. Switching it to the model means re-measuring how much the described mood should count.
-- Quick picks rarely include films from 2023 on: only 0.1% of validation users get one among their three picks. See [Films after 2014](#films-after-2014).
+- Many people get the same new release: two-thirds of validation users would see *One Battle After Another*. See [The new-release pick](#the-new-release-pick).
 - Age ratings are known for just 31% of films.
 
 ## Films after 2014
@@ -116,16 +116,35 @@ New films have no Tag Genome themes, so they're predicted from each film's Wikip
 
 Films without ratings are left out of the model's training, so they aren't taught to look like films nobody chose. Their popularity comes from Wikipedia page views over the last 12 months, through a line fitted on the rated films (R² 0.42), and the model's popularity term for them is predicted from page views and themes.
 
-To check how well a film without ratings is ranked, the model was trained again as if MovieLens's 196 films from 2021 on had no ratings. For people who went on to like one of them, its median position fell only from the top 14.0% to the top 16.5%. But even with their ratings these recent films rank low, because MovieLens users rated few of them, so quick picks rarely show films from 2023 on: 0.1% of validation users get one among their three picks. They're still in the catalog: search finds them, and Claude's chat and the MCP tools can choose them, for example for "something from 2025".
+To check how well a film without ratings is ranked, the model was trained again as if MovieLens's 196 films from 2021 on had no ratings. For people who went on to like one of them, its median position fell only from the top 14.0% to the top 16.5%. But even with their ratings these recent films rank low, because MovieLens users rated few of them: left to the model, only 0.1% of validation users would get a film from 2023 on among their three picks. So the third pick is kept for new releases. Search, Claude's chat and the MCP tools can choose any of them too, for example for "something from 2025".
+
+### The new-release pick
+
+The third quick pick is the best match from the catalog's last three years, now 2024 to 2026. Nobody has rated those films, so the model only roughly knows how widely liked each one is, and on its own it picks a film people like less often than simply taking the most-viewed one. So the pick adds the film's standing in its year to the model's score: its percent rank on Wikipedia page views among the films from the same year, times a weight of 32. It's ranked within the year because page views run far higher in a film's first months, so raw views would put this year's films ahead of everything from 2024.
+
+Nobody's liking of 2024 to 2026 films can be checked, so the check goes back three years. The model was trained again as if MovieLens's 196 films from 2021 to 2023 had no ratings, and each method chose one of those films for the 863 validation users who later liked one. The weight was chosen on training users whose ratings of those films the model never saw. At 5 favourites:
+
+| Choice from the films since 2021 | Liked by the person |
+|---|---:|
+| Model plus standing in its year (used) | 27.5% ± 3.0% |
+| Most Wikipedia page views | 18.4% ± 2.6% |
+| Model alone | 11.5% ± 2.1% |
+| Random film | 2.6% |
+| Model trained with their ratings, for reference | 34.4% ± 3.2% |
+
+Compared person by person, that's 9.0 ± 3.6 points ahead of the most-viewed film and 16.0 ± 3.3 ahead of the model alone (95% confidence). At 1 favourite it matches the model trained with ratings (27.8% against 27.3%).
+
+The cost is variety. In the app, 66% of validation users would get the same new release, *One Battle After Another*, and only 23 different films come up. Even the model alone gives that film to 24% of people, because it knows little about new films beyond how widely they're seen, and a smaller weight gives up hits long before it spreads the picks out. "Not this one" brings the next best. Details are in [results/stage6_recent_pick.md](results/stage6_recent_pick.md).
 
 To add films released since the last run, from `backend`:
 
 ```bash
 .venv/Scripts/python -m pipeline.expand
 .venv/Scripts/python -m pipeline.ranker
+.venv/Scripts/python -m pipeline.recent_pick
 ```
 
-Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
+The last step checks the new-release pick again and says if its weight in `app/recommend.py` should change. Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
 
 ## Simulated users
 
@@ -268,4 +287,4 @@ GroupLens and the University of Minnesota do not endorse this project.
 - [x] Stage 3: PyTorch ranking model
 - [ ] Stage 4: Simulated-user evaluation (quick picks measured; the Claude comparison is waiting on an API key)
 - [x] Stage 5: Public launch, at https://tonights-pick.fly.dev, with spending and rate limits and an MCP server
-- [x] Stage 6: Catalog brought up to this year, with films from MovieLens and Wikidata
+- [x] Stage 6: Catalog brought up to this year, with films from MovieLens and Wikidata, and a new-release pick

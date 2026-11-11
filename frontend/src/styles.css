@@ -94,6 +94,7 @@ ol {
 .dateline,
 .step-title::before,
 .kicker,
+.flag,
 .details,
 .caption,
 .notice,
@@ -110,6 +111,7 @@ footer {
 
 .dateline,
 .kicker,
+.flag,
 .details,
 .caption,
 .suggestions small,
@@ -504,6 +506,14 @@ main > .notice.quiet {
 .year {
   color: var(--muted);
   font-weight: 300;
+}
+
+.flag {
+  margin: 0 0 0.5rem;
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
 }
 
 .details {

@@ -7,6 +7,7 @@ from support import GENOME_SIZE, insert_film, tagged
 
 from app import main
 from app.ranker import encoder_from_bytes, encoder_to_bytes
+from app.recommend import RECENT_POPULARITY_WEIGHT
 from pipeline.embed import normalize
 from pipeline.evaluate import EvalUser
 from pipeline.ranker import (
@@ -20,6 +21,7 @@ from pipeline.ranker import (
     ranker_scorer,
     with_unrated_bias,
 )
+from pipeline.recent_pick import standing_within_year
 
 TINY = TrainingSettings(dim=8, hidden=16, dropout=0.0, batch_size=32, max_epochs=40, patience=40)
 
@@ -119,7 +121,13 @@ def test_films_without_ratings_get_a_bias_predicted_from_the_rated_films():
     assert r2 > 0.99
 
 
-def load_films(database_url: str, genome: np.ndarray, popularity: np.ndarray, ranker: dict) -> None:
+def load_films(
+    database_url: str,
+    genome: np.ndarray,
+    popularity: np.ndarray,
+    ranker: dict,
+    years: list[int] | None = None,
+) -> None:
     """Insert one film per row, with movie ID row + 1, and the ranker's encoder."""
     with psycopg.connect(database_url) as conn:
         conn.execute("INSERT INTO ranker (encoder) VALUES (%s)", (encoder_to_bytes(ranker),))
@@ -128,6 +136,7 @@ def load_films(database_url: str, genome: np.ndarray, popularity: np.ndarray, ra
                 conn, row + 1, f"Film {row}", genome[row], float(popularity[row]),
                 ranker_input=ranker["input_vectors"][row],
                 ranker_output=np.append(ranker["output_vectors"][row], ranker["bias"][row]),
+                year=years[row] if years else 2000,
             )
 
 
@@ -149,6 +158,27 @@ def test_pick_matches_the_evaluated_ranker_score(empty_catalog, liked):
     response = client.post("/api/pick", json={"liked": [row + 1 for row in liked]})
 
     assert response.json()["picks"][0]["film"]["movie_id"] == int(scores.argmax()) + 1
+
+
+def test_the_recent_pick_adds_standing_in_its_year_to_the_ranker_score(empty_catalog):
+    """The recent pick must score films as pipeline.recent_pick evaluated it."""
+    exported = export(random_ranker(films=12))
+    rng = np.random.default_rng(5)
+    popularity = rng.random(12, dtype=np.float32)
+    # The newest film is from 2024, so the films from 2022 on are the recent ones.
+    years = [2000] * 4 + [2022] * 3 + [2023] * 2 + [2024] * 3
+    load_films(
+        empty_catalog, normalize(rng.random((12, GENOME_SIZE), dtype=np.float32)), popularity,
+        exported, years,
+    )
+
+    scores = ranker_scorer(exported)([np.array([0, 1])])[0]
+    scores += RECENT_POPULARITY_WEIGHT * standing_within_year(popularity, np.array(years))
+    scores[:4] = -np.inf
+    picks = client.post("/api/pick", json={"liked": [1, 2], "count": 1, "recent": 1}).json()["picks"]
+
+    assert picks[0]["film"]["movie_id"] == int(scores.argmax()) + 1
+    assert picks[0]["recent"]
 
 
 def test_pick_uses_the_ranker_instead_of_stage_1_when_one_is_loaded(empty_catalog):

@@ -80,6 +80,46 @@ def test_replacing_a_pick_leaves_out_the_films_still_showing(catalog):
     assert [pick["film"]["title"] for pick in body["picks"]] == ["100% Wolf"]
 
 
+def summary(picks: list[dict]) -> list[tuple[str, bool]]:
+    return [(pick["film"]["title"], pick["recent"]) for pick in picks]
+
+
+def test_the_last_picks_can_be_asked_to_be_recent_releases(catalog):
+    # The sample catalog ends in 2020, so films from 2018 on are recent: only 100% Wolf.
+    def picks(recent: int) -> list[tuple[str, bool]]:
+        body = client.post("/api/pick", json={"liked": [1], "count": 2, "recent": recent}).json()
+        return summary(body["picks"])
+
+    assert picks(0) == [("Blade Runner", False), ("Notting Hill", False)]
+    assert picks(1) == [("Blade Runner", False), ("100% Wolf", True)]
+
+
+def test_a_recent_pick_is_any_film_once_no_recent_one_is_left(catalog):
+    body = client.post(
+        "/api/pick", json={"liked": [1], "rejected": [4], "count": 2, "recent": 1}
+    ).json()
+
+    assert summary(body["picks"]) == [("Blade Runner", False), ("Notting Hill", False)]
+
+
+def test_a_recent_film_picked_on_its_merits_isnt_picked_twice(empty_catalog):
+    with psycopg.connect(empty_catalog) as conn:
+        insert_film(conn, 1, "Alpha", tagged(t0=1.0), year=1999)
+        insert_film(conn, 2, "Bravo", tagged(t0=1.0), popularity=0.5, year=2025)
+        insert_film(conn, 3, "Charlie", tagged(t0=1.0, t1=0.5), popularity=0.3, year=1990)
+        insert_film(conn, 4, "Delta", tagged(t5=1.0), year=2026)
+
+    body = client.post("/api/pick", json={"liked": [1], "count": 2, "recent": 1}).json()
+
+    assert summary(body["picks"]) == [("Bravo", True), ("Delta", True)]
+
+
+def test_recent_picks_cant_outnumber_the_picks(catalog):
+    response = client.post("/api/pick", json={"liked": [1], "count": 1, "recent": 2})
+
+    assert response.status_code == 422
+
+
 def test_turning_a_film_down_skips_its_sequels_too(empty_catalog):
     with psycopg.connect(empty_catalog) as conn:
         insert_film(conn, 1, "Alpha", tagged(t0=1.0))

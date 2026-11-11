@@ -11,7 +11,7 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import assistant, conversations, limits, mcp_server
@@ -90,6 +90,15 @@ class PickRequest(BaseModel):
     count: int = Field(default=3, ge=1, le=5)
     # Picks still on screen when one is replaced. They're left out, and so are their sequels.
     showing: list[int] = Field(default_factory=list, max_length=5)
+    # How many of the picks, the last ones, come from films released in the catalog's last few
+    # years (recommend.RECENT_YEARS).
+    recent: int = Field(default=0, ge=0, le=5)
+
+    @model_validator(mode="after")
+    def recent_picks_fit_in_count(self) -> "PickRequest":
+        if self.recent > self.count:
+            raise ValueError("recent can't be more than count")
+        return self
 
 
 class PickedFilm(BaseModel):
@@ -112,6 +121,8 @@ class PickReason(BaseModel):
 class Pick(BaseModel):
     film: PickedFilm
     reason: PickReason
+    # Released in the catalog's last few years, whichever slot it was picked for.
+    recent: bool
 
 
 class PickResponse(BaseModel):
@@ -183,7 +194,9 @@ def search(
 
 @app.post("/api/pick", dependencies=[per_minute])
 def pick(request: PickRequest) -> PickResponse:
-    picks = pick_films(request.liked, request.rejected, request.count, request.showing)
+    picks = pick_films(
+        request.liked, request.rejected, request.count, request.showing, request.recent
+    )
     if not picks:
         raise HTTPException(status_code=404, detail="No film is available to pick.")
     return PickResponse(picks=picks)
