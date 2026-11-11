@@ -1,6 +1,8 @@
 # Keep the build context small: the datasets alone are several gigabytes.
 .git
-.env
+# Secrets, such as Neon's connection strings in .env.local, never go to the builder.
+.env*
+.neon
 data/
 results/
 backend/tests/
