@@ -5,6 +5,10 @@ import type { FilmMatch, Preferences } from "./types";
 
 const FAVOURITES_KEY = "tonights-pick:favourites";
 const PREFERENCES_KEY = "tonights-pick:preferences";
+// public/theme.js reads this too, to apply the theme before the page is drawn.
+const THEME_KEY = "tonights-pick:theme";
+
+export type Theme = "light" | "dark";
 
 export const NO_PREFERENCES: Preferences = { avoid_genres: [], max_runtime: null };
 
@@ -51,4 +55,14 @@ export function loadPreferences(): Preferences {
 
 export function savePreferences(preferences: Preferences) {
   write(PREFERENCES_KEY, preferences);
+}
+
+// The theme someone chose with the switch, or null to follow the system setting.
+export function loadTheme(): Theme | null {
+  const stored = read(THEME_KEY);
+  return stored === "light" || stored === "dark" ? stored : null;
+}
+
+export function saveTheme(theme: Theme) {
+  write(THEME_KEY, theme);
 }

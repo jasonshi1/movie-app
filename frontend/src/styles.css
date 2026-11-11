@@ -15,8 +15,10 @@
   --column: 40rem;
 }
 
+/* Dark when the system asks for it, unless light was chosen with the switch in the dateline,
+   and always when dark was chosen. The two dark blocks must match. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #12110f;
     --surface: #1a1815;
     --ink: #ece6d9;
@@ -25,6 +27,21 @@
     --accent: #ec7b57;
     --tint: rgb(236 123 87 / 0.1);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #12110f;
+  --surface: #1a1815;
+  --ink: #ece6d9;
+  --muted: #9e9584;
+  --rule: #2f2b25;
+  --accent: #ec7b57;
+  --tint: rgb(236 123 87 / 0.1);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 *,
@@ -132,14 +149,38 @@ footer {
 
 .dateline {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.2rem 1rem;
   margin: 0;
   padding: 0.45rem 0 0.35rem;
   border-top: 3px solid var(--ink);
   border-bottom: 1px solid var(--ink);
   font-size: 0.72rem;
   letter-spacing: 0.08em;
+}
+
+/* Stays at the right, with the switch, when a narrow screen wraps it onto its own line. */
+.dateline-end {
+  display: flex;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.theme-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
 }
 
 h1 {
