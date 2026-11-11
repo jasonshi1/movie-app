@@ -27,6 +27,7 @@ function reply(overrides: Partial<ChatReply> = {}): ChatReply {
         certification: "R",
         wikipedia_url: null,
         where_to_watch_url: "https://www.justwatch.com/ca/search?q=Blade%20Runner",
+        poster_url: "https://upload.wikimedia.org/wikipedia/en/blade-runner.png",
       },
       reason: "Like The Matrix, it questions what's real.",
     },
@@ -66,6 +67,10 @@ it("sends the message with favourites and preferences, then shows Claude's pick"
 
   expect(await screen.findByRole("heading", { name: "Blade Runner (1982)" })).toBeTruthy();
   expect(screen.getByText("Like The Matrix, it questions what's real.")).toBeTruthy();
+  const pick = screen.getByRole("article", { name: "Claude's pick" });
+  expect(pick.querySelector("img")?.getAttribute("src")).toBe(
+    "https://upload.wikimedia.org/wikipedia/en/blade-runner.png",
+  );
   expect(bodies[0]).toEqual({
     conversation_id: null,
     message: "Something mind-bending",

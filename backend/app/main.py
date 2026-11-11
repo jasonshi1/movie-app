@@ -24,9 +24,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # The app only loads its own files and calls its own API.
+# Posters load from Wikimedia (pipeline.posters keeps only addresses on these hosts).
 CONTENT_SECURITY_POLICY = (
-    "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; "
-    "form-action 'self'"
+    "default-src 'self'; img-src 'self' data: https://upload.wikimedia.org "
+    "https://thumb.wikimedia.org; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
 )
 
 
@@ -82,6 +83,7 @@ class FilmMatch(BaseModel):
     title: str
     year: int | None
     directors: list[str]
+    poster_url: str | None
 
 
 class PickRequest(BaseModel):
@@ -111,6 +113,8 @@ class PickedFilm(BaseModel):
     certification: str | None
     wikipedia_url: str | None
     where_to_watch_url: str
+    # The lead image of the film's Wikipedia article, nearly always its poster.
+    poster_url: str | None
 
 
 class PickReason(BaseModel):

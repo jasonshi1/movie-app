@@ -283,9 +283,8 @@ textarea::placeholder {
 
 .suggestions button {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.85rem;
   width: 100%;
   padding: 0.6rem 0.35rem;
   border: 0;
@@ -300,11 +299,54 @@ textarea::placeholder {
   outline-offset: -2px;
 }
 
+.suggestions .match {
+  flex: 1;
+  min-width: 0;
+}
+
 .suggestions small {
   flex-shrink: 0;
   color: var(--muted);
   font-size: 0.72rem;
   letter-spacing: 0.05em;
+}
+
+/* Posters: a small thumbnail beside each search match, and a larger one set into the top
+   right of each pick, with the title wrapping around it as on a printed page. Posters are
+   about 2:3, so a few are cropped slightly to keep the frames even. */
+.thumb,
+.poster {
+  display: block;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+}
+
+.thumb {
+  flex-shrink: 0;
+  width: 1.9rem;
+}
+
+.thumb.empty {
+  background: var(--tint);
+}
+
+.poster {
+  float: right;
+  width: 4.75rem;
+  margin: 0.2rem 0 0.75rem 1rem;
+}
+
+@media (min-width: 40rem) {
+  .poster {
+    width: 6.5rem;
+    margin-left: 1.5rem;
+  }
+
+  .transcript .poster {
+    width: 5.5rem;
+  }
 }
 
 .tags {
@@ -514,6 +556,8 @@ main > .notice.quiet {
 }
 
 .pick {
+  /* Holds the floated poster inside the card. */
+  display: flow-root;
   animation: arrive 320ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
 
@@ -726,6 +770,21 @@ footer {
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.7;
+}
+
+footer p {
+  margin: 0;
+}
+
+/* Set like the credit at the foot of a programme. */
+footer .byline {
+  margin-top: 1.5rem;
+  padding-top: 0.6rem;
+  border-top: 3px solid var(--ink);
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 @media (prefers-reduced-motion: reduce) {

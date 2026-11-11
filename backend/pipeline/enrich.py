@@ -106,12 +106,11 @@ def fetch_wikidata(imdb_ids: list[str]) -> dict:
     return cache
 
 
-def resolve_extracts(query: dict, titles: list[str]) -> dict[str, str]:
-    """Map each requested title to its intro text, following normalization and redirects."""
+def final_titles(query: dict, titles: list[str]) -> dict[str, str]:
+    """Map each requested title to the page it ends up at, after normalization and redirects."""
     forward: dict[str, str] = {}
     for step in query.get("normalized", []) + query.get("redirects", []):
         forward[step["from"]] = step["to"]
-    extracts = {page["title"]: page.get("extract", "") for page in query["pages"].values()}
 
     resolved = {}
     for title in titles:
@@ -120,8 +119,16 @@ def resolve_extracts(query: dict, titles: list[str]) -> dict[str, str]:
         while current in forward and forward[current] not in seen:
             current = forward[current]
             seen.add(current)
-        resolved[title] = extracts.get(current, "")
+        resolved[title] = current
     return resolved
+
+
+def resolve_extracts(query: dict, titles: list[str]) -> dict[str, str]:
+    """Map each requested title to its intro text, following normalization and redirects."""
+    extracts = {page["title"]: page.get("extract", "") for page in query["pages"].values()}
+    return {
+        title: extracts.get(final, "") for title, final in final_titles(query, titles).items()
+    }
 
 
 def fetch_wikipedia(titles: list[str]) -> dict:

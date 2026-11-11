@@ -3,6 +3,8 @@ export type FilmMatch = {
   title: string;
   year: number | null;
   directors: string[];
+  // Missing for favourites saved before posters were added.
+  poster_url?: string | null;
 };
 
 export type PickedFilm = {
@@ -15,6 +17,7 @@ export type PickedFilm = {
   certification: string | null;
   wikipedia_url: string | null;
   where_to_watch_url: string;
+  poster_url: string | null;
 };
 
 export type Preferences = {

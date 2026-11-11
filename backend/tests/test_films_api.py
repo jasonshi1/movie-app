@@ -2,7 +2,7 @@ import numpy as np
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from support import GENOME_SIZE, insert_film, load_sample_catalog, tagged
+from support import BLADE_RUNNER_POSTER, GENOME_SIZE, insert_film, load_sample_catalog, tagged
 
 from app import main
 from app.recommend import POPULARITY_WEIGHT, shared_themes
@@ -32,6 +32,14 @@ def test_search_tolerates_a_typo(catalog):
     assert response.json()[0]["title"] == "Blade Runner"
 
 
+def test_search_results_carry_their_posters(catalog):
+    matches = client.get("/api/films/search", params={"q": "e"}).json()
+    posters = {match["title"]: match["poster_url"] for match in matches}
+
+    assert posters["Blade Runner"] == BLADE_RUNNER_POSTER
+    assert posters["The Matrix"] is None
+
+
 def test_search_treats_percent_signs_literally(catalog):
     response = client.get("/api/films/search", params={"q": "100%"})
 
@@ -50,6 +58,7 @@ def test_pick_returns_the_closest_film_first_with_a_reason(catalog):
     assert best["film"]["title"] == "Blade Runner"
     assert best["film"]["runtime"] == 117
     assert best["film"]["wikipedia_url"] == "https://en.wikipedia.org/wiki/Blade_Runner"
+    assert best["film"]["poster_url"] == BLADE_RUNNER_POSTER
     assert best["reason"]["similar_to"] == "The Matrix"
 
 

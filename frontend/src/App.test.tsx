@@ -10,7 +10,17 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
 
-const MATRIX = { movie_id: 1, title: "The Matrix", year: 1999, directors: ["The Wachowskis"] };
+const MATRIX = {
+  movie_id: 1,
+  title: "The Matrix",
+  year: 1999,
+  directors: ["The Wachowskis"],
+  poster_url: "https://upload.wikimedia.org/wikipedia/en/matrix.jpg",
+};
+
+function posterFor(movieId: number) {
+  return `https://thumb.wikimedia.org/wikipedia/en/${movieId}.jpg`;
+}
 
 function pickOf(movieId: number, title: string, recent = false) {
   return {
@@ -24,6 +34,7 @@ function pickOf(movieId: number, title: string, recent = false) {
       certification: "R",
       wikipedia_url: "https://en.wikipedia.org/wiki/Blade_Runner",
       where_to_watch_url: "https://www.justwatch.com/ca/search?q=Blade%20Runner",
+      poster_url: movieId === 3 ? null : posterFor(movieId),
     },
     reason: { similar_to: "The Matrix", themes: ["dystopia", "cyberpunk"] },
     recent,
@@ -277,4 +288,48 @@ it("starts in the theme chosen on an earlier visit", () => {
 
   expect(screen.getByRole("button", { name: "Light mode" })).toBeTruthy();
   expect(document.documentElement.dataset.theme).toBe("dark");
+});
+
+it("shows each pick's poster, and none for a film without one", async () => {
+  stubApi([{ status: 200, body: THREE }]);
+  const { container } = render(<App />);
+  await addMatrixAsFavourite();
+  fireEvent.click(pickButton());
+  await screen.findByRole("heading", { name: "Blade Runner (1982)" });
+
+  const posters = [...container.querySelectorAll(".pick-list article")].map(
+    (article) => article.querySelector("img")?.getAttribute("src") ?? null,
+  );
+
+  // Gattaca, film 3, has no poster.
+  expect(posters).toEqual([posterFor(2), null, posterFor(4)]);
+});
+
+it("drops a poster that fails to load", async () => {
+  stubApi([{ status: 200, body: THREE }]);
+  const { container } = render(<App />);
+  await addMatrixAsFavourite();
+  fireEvent.click(pickButton());
+  await screen.findByRole("heading", { name: "Blade Runner (1982)" });
+
+  fireEvent.error(container.querySelector(".pick-list img")!);
+
+  expect(container.querySelectorAll(".pick-list img")).toHaveLength(1);
+});
+
+it("shows posters beside matching films", async () => {
+  stubApi([]);
+  const { container } = render(<App />);
+
+  fireEvent.change(screen.getByLabelText("Films you love"), { target: { value: "matr" } });
+  await screen.findByRole("button", { name: /The Matrix \(1999\)/ });
+
+  expect(container.querySelector(".suggestions img")?.getAttribute("src")).toBe(MATRIX.poster_url);
+});
+
+it("says who made it", () => {
+  stubApi([]);
+  render(<App />);
+
+  expect(screen.getByText("Created By: Jason Shi")).toBeTruthy();
 });

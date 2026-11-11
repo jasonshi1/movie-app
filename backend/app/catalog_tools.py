@@ -11,7 +11,13 @@ from dataclasses import dataclass
 import psycopg
 
 from app.config import settings
-from app.recommend import FILM_CARD_COLUMNS, POPULARITY_WEIGHT, film_card, vector_literal
+from app.recommend import (
+    CARD_WIDTH,
+    FILM_CARD_COLUMNS,
+    POPULARITY_WEIGHT,
+    film_card,
+    vector_literal,
+)
 
 SEARCH_LIMIT = 8
 # How much the described mood counts against long-term taste. Mood similarities vary little
@@ -90,7 +96,7 @@ def _summary(row: tuple, tags: list[tuple[int, str]]) -> dict:
         "certification": card["certification"],
         "genres": card["genres"],
         "directors": card["directors"],
-        "themes": _top_themes(row[8], tags),
+        "themes": _top_themes(row[CARD_WIDTH], tags),
     }
 
 
@@ -134,8 +140,8 @@ def film_details(movie_id: int) -> dict | None:
         tags = conn.execute(_DISPLAYABLE_TAGS).fetchall()
     return {
         **_summary(row, tags),
-        "cast": row[9][:6],
-        "description": row[10][:DESCRIPTION_CHARS],
+        "cast": row[CARD_WIDTH + 1][:6],
+        "description": row[CARD_WIDTH + 2][:DESCRIPTION_CHARS],
     }
 
 

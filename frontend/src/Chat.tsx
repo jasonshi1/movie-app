@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import FilmTitle from "./FilmTitle";
+import Poster from "./Poster";
 import { applyProposal, describeProposal, details } from "./format";
 import type { ChatReply, FilmMatch, Preferences, Proposal } from "./types";
 
@@ -148,6 +149,7 @@ export default function Chat({ favourites, preferences, onPreferencesChange }: P
               <li key={index} className="claude">
                 {entry.reply.pick && (
                   <article className="pick" aria-label="Claude's pick">
+                    <Poster url={entry.reply.pick.film.poster_url} className="poster" />
                     <h3>
                       <FilmTitle film={entry.reply.pick.film} />
                     </h3>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import Chat from "./Chat";
 import FilmTitle from "./FilmTitle";
+import Poster from "./Poster";
 import { details, withYear } from "./format";
 import { loadFavourites, loadPreferences, saveFavourites, savePreferences } from "./storage";
 import { useTheme } from "./theme";
@@ -212,7 +213,8 @@ export default function App() {
               {suggestions.map((film) => (
                 <li key={film.movie_id}>
                   <button type="button" onClick={() => addFavourite(film)}>
-                    <span>{withYear(film)}</span>
+                    <Poster url={film.poster_url} className="thumb" keepSpace />
+                    <span className="match">{withYear(film)}</span>
                     {film.directors[0] && <small>{film.directors[0]}</small>}
                   </button>
                 </li>
@@ -275,6 +277,7 @@ export default function App() {
               {picks.map((pick) => (
                 <li key={pick.film.movie_id}>
                   <article className="pick">
+                    <Poster url={pick.film.poster_url} className="poster" />
                     {pick.recent && <p className="flag">New release</p>}
                     <h2>
                       <FilmTitle film={pick.film} />
@@ -325,12 +328,17 @@ export default function App() {
       </main>
 
       <footer>
-        Film data from <a href="https://grouplens.org/datasets/movielens/">MovieLens</a> and the{" "}
-        <a href="https://grouplens.org/datasets/movielens/tag-genome-2021/">Tag Genome</a> by
-        GroupLens (CC BY-NC 3.0), <a href="https://www.wikidata.org/">Wikidata</a> and{" "}
-        <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA), with popularity from
-        Wikipedia page views. Free and non-commercial. MovieLens ratings end in October 2023, so
-        newer films are matched by their descriptions alone.
+        <p>
+          Film data from <a href="https://grouplens.org/datasets/movielens/">MovieLens</a> and
+          the <a href="https://grouplens.org/datasets/movielens/tag-genome-2021/">Tag Genome</a>{" "}
+          by GroupLens (CC BY-NC 3.0), <a href="https://www.wikidata.org/">Wikidata</a> and{" "}
+          <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA), with popularity from
+          Wikipedia page views. Posters are the lead images of each film&rsquo;s Wikipedia
+          article; most are copyrighted by their studios and shown here to identify the film.
+          Free and non-commercial. MovieLens ratings end in October 2023, so newer films are
+          matched by their descriptions alone.
+        </p>
+        <p className="byline">Created By: Jason Shi</p>
       </footer>
     </>
   );
