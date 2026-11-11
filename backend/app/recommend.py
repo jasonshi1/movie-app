@@ -21,12 +21,15 @@ POPULARITY_WEIGHT = 1.0
 THEME_COUNT = 3
 
 # Picks shown together should be a real choice, so a film is passed over when it's from the same
-# series as one already chosen. Sequels' genomes are 0.82 to 0.98 similar, and different films
-# rarely pass 0.90 (Seven and The Silence of the Lambs), so similarity catches most sequels and
-# the title catches the rest, such as Shrek 2 at 0.895.
+# series as one already chosen, still showing, or recently turned down. Sequels' genomes are
+# 0.82 to 0.98 similar, and different films rarely pass 0.90 (Seven and The Silence of the
+# Lambs), so similarity catches most sequels and the title catches the rest, such as Shrek 2 at
+# 0.895.
 SAME_SERIES_SIMILARITY = 0.92
 # How many of the best films to look through for each pick asked for.
 CANDIDATES_PER_PICK = 10
+# How many of the most recently turned-down films have their series skipped too.
+TURNED_DOWN_SERIES = 20
 _ARTICLES = {"the", "a", "an"}
 
 # The columns film_card() reads, in order, from a query that aliases films as "film".
@@ -85,7 +88,7 @@ LIMIT 1
 
 _DISPLAYABLE_TAGS = "SELECT position, tag FROM genome_tags WHERE displayable"
 
-_SHOWING = "SELECT title, genome::text FROM films WHERE movie_id = ANY(%(showing)s)"
+_AVOIDED = "SELECT title, genome::text FROM films WHERE movie_id = ANY(%(avoided)s)"
 
 
 def vector_literal(vector: np.ndarray) -> str:
@@ -176,13 +179,13 @@ def same_series(a: tuple[str, np.ndarray], b: tuple[str, np.ndarray]) -> bool:
 def choose_distinct(
     candidates: Sequence[tuple[str, np.ndarray]],
     count: int,
-    showing: Sequence[tuple[str, np.ndarray]] = (),
+    avoid: Sequence[tuple[str, np.ndarray]] = (),
 ) -> list[int]:
     """Indexes of up to count candidates, taken best first and skipping any in the same series
-    as one already chosen or showing. If too few are left, the skipped ones fill the gap."""
+    as one already chosen or one to avoid. If too few are left, the skipped ones fill the gap."""
     chosen: list[int] = []
     skipped: list[int] = []
-    kept = list(showing)
+    kept = list(avoid)
     for index, candidate in enumerate(candidates):
         if len(chosen) == count:
             break
@@ -200,8 +203,9 @@ def pick_films(
     """Return up to count of the best films the person hasn't named or rejected, best first,
     each with the reason: the closest favourite and the themes they share.
 
-    The first is always the ranker's best film. The rest skip films from the same series as
-    one already picked, or as the films in showing: picks still on screen, which are left out.
+    Films from the same series as one already picked are skipped, and so are films from the
+    series of the picks in showing (still on screen, and left out) and of the most recently
+    rejected films. So with nothing turned down, the first is always the ranker's best film.
     """
     with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
         parameters = {
@@ -223,12 +227,13 @@ def pick_films(
         def genome(text: str) -> np.ndarray:
             return np.array(json.loads(text), dtype=np.float32)
 
-        on_screen = [
+        avoided_ids = list(showing) + rejected[-TURNED_DOWN_SERIES:]
+        avoided = [
             (title, genome(vector))
-            for title, vector in conn.execute(_SHOWING, {"showing": list(showing)}).fetchall()
+            for title, vector in conn.execute(_AVOIDED, {"avoided": avoided_ids}).fetchall()
         ]
         candidates = [(row[1], genome(row[8])) for row in rows]
-        rows = [rows[index] for index in choose_distinct(candidates, count, on_screen)]
+        rows = [rows[index] for index in choose_distinct(candidates, count, avoided)]
 
         tags = conn.execute(_DISPLAYABLE_TAGS).fetchall()
         picks = []
