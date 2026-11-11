@@ -4,6 +4,7 @@ import Chat from "./Chat";
 import FilmTitle from "./FilmTitle";
 import { details, withYear } from "./format";
 import { loadFavourites, loadPreferences, saveFavourites, savePreferences } from "./storage";
+import { useTheme } from "./theme";
 import type { FilmMatch, PickedFilm, Preferences } from "./types";
 
 type Pick = {
@@ -40,6 +41,7 @@ export default function App() {
   const [status, setStatus] = useState<PickStatus>("idle");
   const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
   const [newestYear, setNewestYear] = useState<number | null>(null);
+  const [theme, toggleTheme] = useTheme();
 
   useEffect(() => saveFavourites(favourites), [favourites]);
   useEffect(() => savePreferences(preferences), [preferences]);
@@ -173,10 +175,15 @@ export default function App() {
   return (
     <>
       <header className="masthead">
-        <p className="dateline">
+        <div className="dateline">
           <span>{today}</span>
-          {newestYear && <span>Films up to {newestYear}</span>}
-        </p>
+          <span className="dateline-end">
+            {newestYear && <span>Films up to {newestYear}</span>}
+            <button className="theme-toggle" type="button" onClick={toggleTheme}>
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
+          </span>
+        </div>
         <h1>
           Tonight’s <em>Pick</em>
         </h1>

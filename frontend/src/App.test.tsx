@@ -7,6 +7,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
 });
 
 const MATRIX = { movie_id: 1, title: "The Matrix", year: 1999, directors: ["The Wachowskis"] };
@@ -251,4 +252,29 @@ it("remembers favourites after a reload", async () => {
   render(<App />);
 
   expect(screen.getByRole("button", { name: "Remove The Matrix" })).toBeTruthy();
+});
+
+it("switches to dark mode and back, remembering the choice", () => {
+  stubApi([]);
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Dark mode" }));
+
+  expect(document.documentElement.dataset.theme).toBe("dark");
+  expect(window.localStorage.getItem("tonights-pick:theme")).toBe('"dark"');
+
+  fireEvent.click(screen.getByRole("button", { name: "Light mode" }));
+
+  expect(document.documentElement.dataset.theme).toBe("light");
+  expect(window.localStorage.getItem("tonights-pick:theme")).toBe('"light"');
+});
+
+it("starts in the theme chosen on an earlier visit", () => {
+  window.localStorage.setItem("tonights-pick:theme", '"dark"');
+  stubApi([]);
+
+  render(<App />);
+
+  expect(screen.getByRole("button", { name: "Light mode" })).toBeTruthy();
+  expect(document.documentElement.dataset.theme).toBe("dark");
 });
