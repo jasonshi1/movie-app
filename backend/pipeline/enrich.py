@@ -33,7 +33,9 @@ def _request_json(request: urllib.request.Request) -> dict:
             if error.code not in (429, 500, 502, 503, 504) or attempt == MAX_ATTEMPTS:
                 raise
             time.sleep(float(error.headers.get("Retry-After") or 5 * attempt))
-        except (urllib.error.URLError, TimeoutError):
+        # The Wikidata query service sometimes cuts a slow response off partway, leaving
+        # invalid JSON, so that's retried like a dropped connection.
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             if attempt == MAX_ATTEMPTS:
                 raise
             time.sleep(5 * attempt)

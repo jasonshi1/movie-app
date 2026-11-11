@@ -37,11 +37,16 @@ def test_chat_is_unavailable_without_an_api_key(monkeypatch):
     response = send()
 
     assert response.status_code == 503
-    assert client.get("/api/config").json() == {"conversation": False}
+    assert client.get("/api/config").json()["conversation"] is False
 
 
 def test_config_reports_chat_when_a_key_is_set(chat):
-    assert client.get("/api/config").json() == {"conversation": True}
+    assert client.get("/api/config").json()["conversation"] is True
+
+
+def test_config_reports_the_newest_film_year(chat):
+    # The sample catalog's newest film is 100% Wolf, from 2020.
+    assert client.get("/api/config").json()["newest_year"] == 2020
 
 
 def test_a_chat_turn_returns_the_pick_with_its_details(chat):

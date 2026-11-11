@@ -36,7 +36,7 @@ from app.config import settings
 from app.conversations import Conversation
 from app.main import ChatRequest, compose_message
 from app.recommend import POPULARITY_WEIGHT
-from pipeline.catalog import PROCESSED_DIR, popularity_scores
+from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 from pipeline.evaluate import (
     RESULTS_DIR,
@@ -236,7 +236,7 @@ def load_catalog() -> tuple[Catalog, np.ndarray, pl.DataFrame]:
         tag_positions=positions,
         tag_names=[tags[index] for index in positions],
     )
-    return catalog, popularity_scores(films["liked_count"].to_numpy()), films
+    return catalog, film_popularity(films), films
 
 
 def simulated_users(catalog: Catalog, limit: int) -> list[SimulatedUser]:

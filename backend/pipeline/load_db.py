@@ -10,7 +10,7 @@ import psycopg
 from app.config import settings
 from app.ranker import encoder_to_bytes
 from app.recommend import vector_literal
-from pipeline.catalog import PROCESSED_DIR, popularity_scores
+from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 from pipeline.tag_policy import is_displayable
 
@@ -51,7 +51,7 @@ def main() -> None:
     )
     genome = normalize(np.load(PROCESSED_DIR / "genome.npy"))
     embeddings = np.load(PROCESSED_DIR / "text_embeddings.npy")
-    popularity = popularity_scores(films["liked_count"].to_numpy())
+    popularity = film_popularity(films)
     tags = json.loads((PROCESSED_DIR / "tags.json").read_text(encoding="utf-8"))
     ranker = load_ranker(films["movie_id"].to_numpy())
 

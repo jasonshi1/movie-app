@@ -13,10 +13,12 @@ from pipeline.ranker import (
     MAX_FAVOURITES,
     Ranker,
     TrainingSettings,
+    _loss,
     export,
     film_features,
     fit,
     ranker_scorer,
+    with_unrated_bias,
 )
 
 TINY = TrainingSettings(dim=8, hidden=16, dropout=0.0, batch_size=32, max_epochs=40, patience=40)
@@ -88,6 +90,33 @@ def test_training_learns_which_films_go_together():
     assert scores[0, 5:40].mean() > scores[0, 40:].mean()
     assert scores[1, 45:].mean() > scores[1, :40].mean()
     assert max(entry["stopping_ndcg"] for entry in history) > history[0]["stopping_ndcg"]
+
+
+def test_films_without_ratings_get_no_training_signal():
+    rng = np.random.default_rng(0)
+    rated = torch.ones(82, dtype=torch.bool)
+    rated[80:] = False
+    model = Ranker(torch.from_numpy(rng.normal(size=(82, 4)).astype(np.float32)), TINY, rated)
+
+    _loss(model, clustered_users(64, rng), rng, torch.device("cpu")).backward()
+
+    assert model.bias.grad[80:].abs().sum() == 0
+    assert model.output_ids.weight.grad[80:].abs().sum() == 0
+    assert model.bias.grad[:80].abs().sum() > 0
+
+
+def test_films_without_ratings_get_a_bias_predicted_from_the_rated_films():
+    rng = np.random.default_rng(1)
+    inputs = rng.normal(size=(200, 2)).astype(np.float32)
+    bias = (1.5 * inputs[:, 0] - 0.5).astype(np.float32)
+    rated = np.ones(200, dtype=bool)
+    rated[-20:] = False
+
+    filled, r2 = with_unrated_bias({"bias": np.where(rated, bias, 0.0)}, rated, inputs)
+
+    np.testing.assert_allclose(filled["bias"][-20:], bias[-20:], atol=0.05)
+    np.testing.assert_array_equal(filled["bias"][:-20], bias[:-20])
+    assert r2 > 0.99
 
 
 def load_films(database_url: str, genome: np.ndarray, popularity: np.ndarray, ranker: dict) -> None:

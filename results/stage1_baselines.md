@@ -1,6 +1,6 @@
 # Stage 1 baseline results
 
-Validation users: 5,000. Films: 9,585. Largest 95% confidence half-width on any NDCG score: 0.0080.
+Validation users: 5,000. Films: 13,248. Largest 95% confidence half-width on any NDCG score: 0.0079.
 
 Popularity weight, chosen on training users as the smallest within 97% of the best score: Tag Genome 1.0, text embedding 1.0.
 
@@ -8,52 +8,52 @@ Popularity weight, chosen on training users as the smallest within 97% of the be
 
 | Method | 1 favourite | 3 favourites | 5 favourites | 10 favourites | 20 favourites |
 |---|---:|---:|---:|---:|---:|
-| Popularity | 0.2749 | 0.2749 | 0.2749 | 0.2749 | 0.2749 |
-| Genre match | 0.0883 | 0.0740 | 0.0733 | 0.0673 | 0.0654 |
-| Text embedding | 0.0576 | 0.1022 | 0.1165 | 0.1348 | 0.1550 |
-| Tag Genome | 0.1289 | 0.1548 | 0.1609 | 0.1710 | 0.1803 |
-| Text embedding + popularity | 0.2594 | 0.2833 | 0.2907 | 0.2960 | 0.3006 |
-| Tag Genome + popularity | 0.2573 | 0.2916 | 0.2981 | 0.3039 | 0.3086 |
+| Popularity | 0.2521 | 0.2521 | 0.2521 | 0.2521 | 0.2521 |
+| Genre match | 0.0840 | 0.0674 | 0.0678 | 0.0612 | 0.0574 |
+| Text embedding | 0.0535 | 0.0969 | 0.1115 | 0.1296 | 0.1474 |
+| Tag Genome | 0.1195 | 0.1416 | 0.1453 | 0.1531 | 0.1616 |
+| Text embedding + popularity | 0.2451 | 0.2704 | 0.2761 | 0.2806 | 0.2834 |
+| Tag Genome + popularity | 0.2474 | 0.2809 | 0.2900 | 0.2990 | 0.3052 |
 
 ## Recall@10
 
 | Method | 1 favourite | 3 favourites | 5 favourites | 10 favourites | 20 favourites |
 |---|---:|---:|---:|---:|---:|
-| Popularity | 0.2656 | 0.2656 | 0.2656 | 0.2656 | 0.2656 |
-| Genre match | 0.0761 | 0.0668 | 0.0644 | 0.0612 | 0.0604 |
-| Text embedding | 0.0523 | 0.0944 | 0.1084 | 0.1271 | 0.1454 |
-| Tag Genome | 0.1185 | 0.1457 | 0.1501 | 0.1616 | 0.1705 |
-| Text embedding + popularity | 0.2495 | 0.2698 | 0.2763 | 0.2793 | 0.2834 |
-| Tag Genome + popularity | 0.2475 | 0.2816 | 0.2881 | 0.2946 | 0.2994 |
+| Popularity | 0.2363 | 0.2363 | 0.2363 | 0.2363 | 0.2363 |
+| Genre match | 0.0724 | 0.0615 | 0.0615 | 0.0559 | 0.0526 |
+| Text embedding | 0.0478 | 0.0889 | 0.1034 | 0.1214 | 0.1379 |
+| Tag Genome | 0.1085 | 0.1317 | 0.1356 | 0.1456 | 0.1540 |
+| Text embedding + popularity | 0.2366 | 0.2574 | 0.2633 | 0.2665 | 0.2691 |
+| Tag Genome + popularity | 0.2367 | 0.2707 | 0.2804 | 0.2883 | 0.2952 |
 
 ## Distinct first picks across 5,000 users
 
-The app offers one film at a time, so this shows how personal that first offer is.
+The app's first pick is each method's top film, so this shows how personal it is.
 
 | Method | 1 favourite | 3 favourites | 5 favourites | 10 favourites | 20 favourites |
 |---|---:|---:|---:|---:|---:|
-| Popularity | 15 | 15 | 15 | 15 | 15 |
-| Genre match | 623 | 614 | 628 | 498 | 405 |
-| Text embedding | 996 | 1095 | 829 | 510 | 318 |
-| Tag Genome | 914 | 861 | 660 | 474 | 384 |
-| Text embedding + popularity | 154 | 77 | 59 | 38 | 34 |
-| Tag Genome + popularity | 181 | 95 | 82 | 66 | 58 |
+| Popularity | 9 | 9 | 9 | 9 | 9 |
+| Genre match | 644 | 639 | 669 | 522 | 407 |
+| Text embedding | 1043 | 1197 | 938 | 563 | 367 |
+| Tag Genome | 965 | 930 | 724 | 528 | 414 |
+| Text embedding + popularity | 166 | 77 | 57 | 40 | 37 |
+| Tag Genome + popularity | 200 | 112 | 86 | 65 | 56 |
 
 ## Tag Genome popularity weight, on 2,000 training users
 
 | Popularity weight | Mean NDCG@10 | Distinct first picks |
 |---:|---:|---:|
-| 0.0 | 0.1532 | 426 |
-| 0.1 | 0.2125 | 327 |
-| 0.25 | 0.2462 | 194 |
-| 0.5 | 0.2673 | 107 |
-| 1.0 | 0.2802 | 65 |
-| 1.5 | 0.2839 | 42 |
-| 2.0 | 0.2852 | 27 |
-| 3.0 | 0.2841 | 24 |
-| 4.0 | 0.2821 | 17 |
-| 6.0 | 0.2781 | 12 |
-| 8.0 | 0.2762 | 12 |
-| 12.0 | 0.2736 | 12 |
+| 0.0 | 0.1439 | 444 |
+| 0.1 | 0.2095 | 335 |
+| 0.25 | 0.2478 | 212 |
+| 0.5 | 0.2716 | 131 |
+| 1.0 | 0.2853 | 70 |
+| 1.5 | 0.2882 | 48 |
+| 2.0 | 0.2889 | 33 |
+| 3.0 | 0.2871 | 20 |
+| 4.0 | 0.2845 | 19 |
+| 6.0 | 0.2794 | 15 |
+| 8.0 | 0.2764 | 14 |
+| 12.0 | 0.2717 | 13 |
 
 Unrated films count as misses, so these scores understate real-world quality. They are for comparing methods.

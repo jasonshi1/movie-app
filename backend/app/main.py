@@ -17,7 +17,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app import assistant, conversations, limits, mcp_server
 from app.catalog_tools import GENRES, film_cards
 from app.config import settings
-from app.db import vector_extension_version
+from app.db import newest_film_year, vector_extension_version
 from app.recommend import pick_films, search_films
 
 logging.basicConfig(level=logging.INFO)
@@ -190,8 +190,12 @@ def pick(request: PickRequest) -> PickResponse:
 
 
 @app.get("/api/config")
-def config() -> dict[str, bool]:
-    return {"conversation": settings.anthropic_api_key is not None}
+def config() -> dict[str, bool | int | None]:
+    try:
+        newest_year = newest_film_year()
+    except psycopg.OperationalError:
+        newest_year = None
+    return {"conversation": settings.anthropic_api_key is not None, "newest_year": newest_year}
 
 
 def _label(card: dict) -> str:

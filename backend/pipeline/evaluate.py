@@ -14,7 +14,7 @@ import numpy as np
 import polars as pl
 
 from app.ranker import taste_vectors
-from pipeline.catalog import LIKED_RATING, PROCESSED_DIR, popularity_scores
+from pipeline.catalog import LIKED_RATING, PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 
 RESULTS_DIR = Path(__file__).resolve().parents[2] / "results"
@@ -213,7 +213,7 @@ def main() -> None:
     movie_ids = films["movie_id"].to_numpy()
     genome = normalize(np.load(PROCESSED_DIR / "genome.npy"))
     text = np.load(PROCESSED_DIR / "text_embeddings.npy")
-    popularity = popularity_scores(films["liked_count"].to_numpy())
+    popularity = film_popularity(films)
     genres = genre_matrix(films["genres"].to_list())
 
     ratings = pl.read_parquet(PROCESSED_DIR / "ratings.parquet")
@@ -273,7 +273,7 @@ def main() -> None:
             "",
             f"## Distinct first picks across {len(val_users):,} users",
             "",
-            "The app offers one film at a time, so this shows how personal that first offer is.",
+            "The app's first pick is each method's top film, so this shows how personal it is.",
             "",
             markdown_table(results, "distinct_first_picks", "d"),
             "",

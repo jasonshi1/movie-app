@@ -1,0 +1,67 @@
+{
+  "alpha": 3.0,
+  "held_out": {
+    "Ridge regression, rescaled to each theme's real spread (used)": {
+      "cosine": 0.7754687070846558,
+      "top_overlap": 0.3522964509394572,
+      "theme_correlation": 0.46433761715888977,
+      "most_common_top_theme": 0.47390396659707723
+    },
+    "Ridge regression alone": {
+      "cosine": 0.8126781582832336,
+      "top_overlap": 0.30615866388308977,
+      "theme_correlation": 0.43421670794487,
+      "most_common_top_theme": 0.9895615866388309
+    },
+    "Average of films with the same genres": {
+      "cosine": 0.7760666012763977,
+      "top_overlap": 0.2742171189979123,
+      "theme_correlation": 0.2907733917236328,
+      "most_common_top_theme": 0.9572025052192067
+    },
+    "Average of all films": {
+      "cosine": 0.7317028045654297,
+      "top_overlap": 0.2116910229645094,
+      "theme_correlation": -2.1364510160992722e-08,
+      "most_common_top_theme": 1.0
+    },
+    "Real scores": {
+      "cosine": 1.0,
+      "top_overlap": 1.0,
+      "theme_correlation": 1.0,
+      "most_common_top_theme": 0.3288100208768267
+    }
+  },
+  "tuning": {
+    "0.1": {
+      "cosine": 0.8102064728736877,
+      "top_overlap": 0.3088726513569937,
+      "theme_correlation": 0.42806628346443176
+    },
+    "0.3": {
+      "cosine": 0.8107836246490479,
+      "top_overlap": 0.3078288100208768,
+      "theme_correlation": 0.42945176362991333
+    },
+    "1.0": {
+      "cosine": 0.8119699954986572,
+      "top_overlap": 0.30782881002087686,
+      "theme_correlation": 0.4323105216026306
+    },
+    "3.0": {
+      "cosine": 0.8129829168319702,
+      "top_overlap": 0.30709812108559503,
+      "theme_correlation": 0.4345388412475586
+    },
+    "10.0": {
+      "cosine": 0.8119741082191467,
+      "top_overlap": 0.30229645093945723,
+      "theme_correlation": 0.430661141872406
+    },
+    "30.0": {
+      "cosine": 0.8075820803642273,
+      "top_overlap": 0.29258872651356993,
+      "theme_correlation": 0.41585859656333923
+    }
+  }
+}

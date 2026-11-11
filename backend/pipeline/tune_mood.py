@@ -16,7 +16,7 @@ import polars as pl
 
 from app.catalog_tools import MOOD_WEIGHT, SEARCH_LIMIT
 from app.embedding import embed_query
-from pipeline.catalog import PROCESSED_DIR, popularity_scores
+from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 from pipeline.evaluate import RESULTS_DIR, build_users
 from pipeline.tag_policy import is_displayable
@@ -34,7 +34,7 @@ def main() -> None:
     raw_genome = np.load(PROCESSED_DIR / "genome.npy")
     genome = normalize(raw_genome)
     text = np.load(PROCESSED_DIR / "text_embeddings.npy")
-    popularity = popularity_scores(films["liked_count"].to_numpy())
+    popularity = film_popularity(films)
     tags = json.loads((PROCESSED_DIR / "tags.json").read_text(encoding="utf-8"))
 
     themes = [

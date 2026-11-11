@@ -34,14 +34,22 @@ export default function App() {
   const [replacing, setReplacing] = useState<number | null>(null);
   const [status, setStatus] = useState<PickStatus>("idle");
   const [chatAvailable, setChatAvailable] = useState<boolean | null>(null);
+  const [newestYear, setNewestYear] = useState<number | null>(null);
 
   useEffect(() => saveFavourites(favourites), [favourites]);
   useEffect(() => savePreferences(preferences), [preferences]);
 
   useEffect(() => {
     fetch("/api/config")
-      .then((response) => (response.ok ? (response.json() as Promise<{ conversation: boolean }>) : null))
-      .then((config) => setChatAvailable(config?.conversation ?? false))
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ conversation: boolean; newest_year?: number | null }>)
+          : null,
+      )
+      .then((config) => {
+        setChatAvailable(config?.conversation ?? false);
+        setNewestYear(config?.newest_year ?? null);
+      })
       .catch(() => setChatAvailable(false));
   }, []);
 
@@ -158,7 +166,7 @@ export default function App() {
       <header className="masthead">
         <p className="dateline">
           <span>{today}</span>
-          <span>Films up to 2014</span>
+          {newestYear && <span>Films up to {newestYear}</span>}
         </p>
         <h1>
           Tonight’s <em>Pick</em>
@@ -300,8 +308,9 @@ export default function App() {
         Film data from <a href="https://grouplens.org/datasets/movielens/">MovieLens</a> and the{" "}
         <a href="https://grouplens.org/datasets/movielens/tag-genome-2021/">Tag Genome</a> by
         GroupLens (CC BY-NC 3.0), <a href="https://www.wikidata.org/">Wikidata</a> and{" "}
-        <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA). Free and non-commercial. The
-        catalog covers films up to 2014.
+        <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA), with popularity from
+        Wikipedia page views. Free and non-commercial. MovieLens ratings end in October 2023, so
+        newer films are matched by their descriptions alone.
       </footer>
     </>
   );
