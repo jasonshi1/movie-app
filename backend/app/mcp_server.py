@@ -53,7 +53,8 @@ def pick_film(
 ) -> dict:
     """Pick one film for tonight from the films someone loves, leaving out any they turned down.
 
-    Returns the film and the reason: the closest favourite and the themes they share.
+    Returns the film, the reason (the closest favourite and the themes they share) and whether
+    the film came out in the catalog's last three years.
     """
     result = recommend.pick_film(favourite_ids, rejected_ids)
     if result is None:

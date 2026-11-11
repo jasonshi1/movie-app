@@ -327,6 +327,66 @@ CHECK_TOP = 100
 SHOWN_PICKS = 3
 
 
+@dataclass(frozen=True)
+class Catalog:
+    """What training needs to know about the films, one row per film."""
+
+    films: pl.DataFrame
+    movie_ids: np.ndarray
+    genome: np.ndarray
+    features: np.ndarray
+    rated: np.ndarray  # False for films nobody could have rated (Wikidata's newer films)
+    monthly_views: np.ndarray  # Wikipedia page views, or zeros for a catalog without them
+    unrated_inputs: np.ndarray  # what an unrated film's bias is predicted from
+
+    @property
+    def expanded(self) -> bool:
+        """Whether this is the Stage 6 catalog, with films added after the Tag Genome."""
+        return "source" in self.films.columns
+
+
+def load_catalog() -> Catalog:
+    films = pl.read_parquet(PROCESSED_DIR / "films.parquet")
+    genome = np.load(PROCESSED_DIR / "genome.npy")
+    features = film_features(genome, np.load(PROCESSED_DIR / "text_embeddings.npy"))
+    if "source" in films.columns:
+        rated = (films["source"] != "wikidata").to_numpy()
+        monthly_views = films["monthly_views"].to_numpy()
+    else:
+        rated = np.ones(len(films), bool)
+        monthly_views = np.zeros(len(films), np.float32)
+    return Catalog(
+        films, films["movie_id"].to_numpy(), genome, features, rated, monthly_views,
+        bias_inputs(features, monthly_views),
+    )
+
+
+def train_as_if_unrated(
+    catalog: Catalog, ratings: pl.DataFrame, settings: TrainingSettings, device: torch.device
+) -> tuple[dict[str, np.ndarray], np.ndarray]:
+    """Train again as if the MovieLens films from NEW_FILM_CHECK_FROM on had no ratings, the
+    way the newest films have none. Returns the model and which films were treated that way."""
+    years = catalog.films["year"].fill_null(0).to_numpy()
+    pretend = (
+        catalog.rated & (catalog.films["source"] == "movielens").to_numpy()
+        & (years >= NEW_FILM_CHECK_FROM)
+    )
+    train = build_users(
+        ratings.filter(
+            pl.col("split") == "train", ~pl.col("movie_id").is_in(catalog.movie_ids[pretend])
+        ),
+        catalog.movie_ids, 10**9, seed=SEED,
+    )
+    print(f"new-film check: retraining without ratings for {pretend.sum():,} films from "
+          f"{NEW_FILM_CHECK_FROM} on", flush=True)
+    as_new, _ = fit(
+        catalog.features, train[STOPPING_USERS:], train[:STOPPING_USERS], settings, device,
+        log=lambda line: print(f"new-film check {line}", flush=True),
+        rated=catalog.rated & ~pretend, unrated_bias_inputs=catalog.unrated_inputs,
+    )
+    return as_new, pretend
+
+
 def hidden_ranks(
     scorer: Scorer, users: list[EvalUser], size: int, of_interest: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -360,12 +420,8 @@ def share_shown(scorer: Scorer, users: list[EvalUser], size: int, films: np.ndar
 
 
 def unrated_report(
-    films: pl.DataFrame,
+    catalog: Catalog,
     ratings: pl.DataFrame,
-    movie_ids: np.ndarray,
-    features: np.ndarray,
-    rated: np.ndarray,
-    unrated_inputs: np.ndarray,
     exported: dict[str, np.ndarray],
     val_users: list[EvalUser],
     settings: TrainingSettings,
@@ -375,7 +431,8 @@ def unrated_report(
     """Report lines on the films without ratings: how their bias was predicted, how often
     they're picked, and how well films are ranked when they have no ratings yet."""
     size = VARIETY_PROFILE_SIZE
-    _, r2 = with_unrated_bias(exported, rated, unrated_inputs)
+    rated = catalog.rated
+    _, r2 = with_unrated_bias(exported, rated, catalog.unrated_inputs)
     shown = share_shown(ranker_scorer(exported), val_users, size, ~rated)
     lines = [
         "## Films without ratings",
@@ -391,24 +448,12 @@ def unrated_report(
     if not run_check:
         return lines
 
-    years = films["year"].fill_null(0).to_numpy()
-    pretend = rated & (films["source"] == "movielens").to_numpy() & (years >= NEW_FILM_CHECK_FROM)
-    train = build_users(
-        ratings.filter(pl.col("split") == "train", ~pl.col("movie_id").is_in(movie_ids[pretend])),
-        movie_ids, 10**9, seed=SEED,
-    )
-    print(f"new-film check: retraining without ratings for {pretend.sum():,} films from "
-          f"{NEW_FILM_CHECK_FROM} on", flush=True)
-    as_new, _ = fit(
-        features, train[STOPPING_USERS:], train[:STOPPING_USERS], settings, device,
-        log=lambda line: print(f"new-film check {line}", flush=True),
-        rated=rated & ~pretend, unrated_bias_inputs=unrated_inputs,
-    )
+    as_new, pretend = train_as_if_unrated(catalog, ratings, settings, device)
     warm_shares, warm_hits = hidden_ranks(ranker_scorer(exported), val_users, size, pretend)
     new_shares, new_hits = hidden_ranks(ranker_scorer(as_new), val_users, size, pretend)
     warm_ndcg = evaluate(ranker_scorer(exported), val_users, size).ndcg.mean()
     new_ndcg = evaluate(ranker_scorer(as_new), val_users, size).ndcg.mean()
-    candidates = len(movie_ids)
+    candidates = len(catalog.movie_ids)
     return lines + [
         (f"To estimate how well films without ratings are ranked, the model was trained again "
          f"as if the {pretend.sum():,} MovieLens films from {NEW_FILM_CHECK_FROM} on had no "
@@ -436,18 +481,9 @@ def main() -> None:
     settings = TrainingSettings(max_epochs=arguments.max_epochs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    films = pl.read_parquet(PROCESSED_DIR / "films.parquet")
-    movie_ids = films["movie_id"].to_numpy()
-    raw_genome = np.load(PROCESSED_DIR / "genome.npy")
-    text = np.load(PROCESSED_DIR / "text_embeddings.npy")
-    popularity = film_popularity(films)
-    expanded = "source" in films.columns
-    rated = (films["source"] != "wikidata").to_numpy() if expanded else np.ones(len(films), bool)
-    monthly_views = (
-        films["monthly_views"].to_numpy() if expanded else np.zeros(len(films), np.float32)
-    )
-    features = film_features(raw_genome, text)
-    unrated_inputs = bias_inputs(features, monthly_views)
+    catalog = load_catalog()
+    movie_ids = catalog.movie_ids
+    popularity = film_popularity(catalog.films)
 
     ratings = pl.read_parquet(PROCESSED_DIR / "ratings.parquet")
     started = time.perf_counter()
@@ -463,21 +499,22 @@ def main() -> None:
     )
 
     exported, history = fit(
-        features, train_users, stopping_users, settings, device,
-        log=lambda line: print(line, flush=True), rated=rated, unrated_bias_inputs=unrated_inputs,
+        catalog.features, train_users, stopping_users, settings, device,
+        log=lambda line: print(line, flush=True), rated=catalog.rated,
+        unrated_bias_inputs=catalog.unrated_inputs,
     )
     np.savez(RANKER_PATH, movie_ids=movie_ids, **exported)
     unrated_section = (
-        unrated_report(films, ratings, movie_ids, features, rated, unrated_inputs, exported,
-                       val_users, settings, device, run_check=not arguments.skip_new_film_check)
-        if expanded else []
+        unrated_report(catalog, ratings, exported, val_users, settings, device,
+                       run_check=not arguments.skip_new_film_check)
+        if catalog.expanded else []
     )
 
     baseline_name = "Tag Genome + popularity (Stage 1)"
     summaries = {
         "Popularity": summarize(popularity_scorer(popularity), val_users),
         baseline_name: summarize(
-            similarity_scorer(normalize(raw_genome), popularity, POPULARITY_WEIGHT), val_users
+            similarity_scorer(normalize(catalog.genome), popularity, POPULARITY_WEIGHT), val_users
         ),
         "Ranker": summarize(ranker_scorer(exported), val_users),
     }
