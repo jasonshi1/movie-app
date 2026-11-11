@@ -59,10 +59,10 @@ def test_choose_distinct_skips_sequels_and_keeps_the_order():
     assert choose_distinct(candidates, 3) == [0, 2, 3]
 
 
-def test_choose_distinct_also_avoids_films_still_showing():
+def test_choose_distinct_also_avoids_the_series_of_films_to_avoid():
     candidates = [film("Shrek 2", 0), film("Heat", 1)]
 
-    assert choose_distinct(candidates, 1, showing=[film("Shrek", 3)]) == [1]
+    assert choose_distinct(candidates, 1, avoid=[film("Shrek", 3)]) == [1]
 
 
 def test_choose_distinct_fills_up_with_skipped_films_when_nothing_else_is_left():

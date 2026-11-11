@@ -2,7 +2,7 @@ import numpy as np
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from support import GENOME_SIZE, insert_film, load_sample_catalog
+from support import GENOME_SIZE, insert_film, load_sample_catalog, tagged
 
 from app import main
 from app.recommend import POPULARITY_WEIGHT, shared_themes
@@ -78,6 +78,21 @@ def test_replacing_a_pick_leaves_out_the_films_still_showing(catalog):
     ).json()
 
     assert [pick["film"]["title"] for pick in body["picks"]] == ["100% Wolf"]
+
+
+def test_turning_a_film_down_skips_its_sequels_too(empty_catalog):
+    with psycopg.connect(empty_catalog) as conn:
+        insert_film(conn, 1, "Alpha", tagged(t0=1.0))
+        insert_film(conn, 2, "Rocky II", tagged(t0=1.0), popularity=0.5)
+        insert_film(conn, 3, "Heat", tagged(t0=1.0, t1=0.5), popularity=0.1)
+        insert_film(conn, 4, "Rocky", tagged(t5=1.0))
+
+    def first_pick(rejected: list[int]) -> str:
+        body = client.post("/api/pick", json={"liked": [1], "rejected": rejected, "count": 1})
+        return body.json()["picks"][0]["film"]["title"]
+
+    assert first_pick([]) == "Rocky II"
+    assert first_pick([4]) == "Heat"
 
 
 def test_pick_reason_never_shows_hidden_tags(catalog):
