@@ -42,28 +42,55 @@ def test_search_with_blank_query_returns_nothing(catalog):
     assert client.get("/api/films/search", params={"q": "   "}).json() == []
 
 
-def test_pick_returns_the_closest_film_with_a_reason(catalog):
+def test_pick_returns_the_closest_film_first_with_a_reason(catalog):
     response = client.post("/api/pick", json={"liked": [1]})
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["film"]["title"] == "Blade Runner"
-    assert body["film"]["runtime"] == 117
-    assert body["film"]["wikipedia_url"] == "https://en.wikipedia.org/wiki/Blade_Runner"
-    assert body["reason"]["similar_to"] == "The Matrix"
+    best = response.json()["picks"][0]
+    assert best["film"]["title"] == "Blade Runner"
+    assert best["film"]["runtime"] == 117
+    assert best["film"]["wikipedia_url"] == "https://en.wikipedia.org/wiki/Blade_Runner"
+    assert best["reason"]["similar_to"] == "The Matrix"
+
+
+def test_pick_returns_three_films_best_first_each_with_a_reason(catalog):
+    picks = client.post("/api/pick", json={"liked": [1]}).json()["picks"]
+
+    # 100% Wolf has Notting Hill's themes, so it would be skipped, but it's the only film left.
+    assert [pick["film"]["title"] for pick in picks] == ["Blade Runner", "Notting Hill", "100% Wolf"]
+    assert all(pick["reason"]["similar_to"] == "The Matrix" for pick in picks)
+
+
+def test_pick_can_ask_for_fewer_films(catalog):
+    picks = client.post("/api/pick", json={"liked": [1], "count": 1}).json()["picks"]
+
+    assert [pick["film"]["title"] for pick in picks] == ["Blade Runner"]
+
+
+@pytest.mark.parametrize("count", [0, 6])
+def test_pick_count_is_limited(catalog, count):
+    assert client.post("/api/pick", json={"liked": [1], "count": count}).status_code == 422
+
+
+def test_replacing_a_pick_leaves_out_the_films_still_showing(catalog):
+    body = client.post(
+        "/api/pick", json={"liked": [1], "rejected": [3], "count": 1, "showing": [2]}
+    ).json()
+
+    assert [pick["film"]["title"] for pick in body["picks"]] == ["100% Wolf"]
 
 
 def test_pick_reason_never_shows_hidden_tags(catalog):
-    themes = client.post("/api/pick", json={"liked": [1]}).json()["reason"]["themes"]
+    themes = client.post("/api/pick", json={"liked": [1]}).json()["picks"][0]["reason"]["themes"]
 
     assert "twist ending" not in themes
     assert themes[:2] == ["dystopia", "cyberpunk"]
 
 
 def test_pick_skips_favourites_and_rejected_films(catalog):
-    body = client.post("/api/pick", json={"liked": [1], "rejected": [2]}).json()
+    picks = client.post("/api/pick", json={"liked": [1], "rejected": [2]}).json()["picks"]
 
-    assert body["film"]["title"] == "Notting Hill"
+    assert [pick["film"]["title"] for pick in picks] == ["Notting Hill", "100% Wolf"]
 
 
 def test_pick_is_404_when_every_film_is_excluded(catalog):
@@ -84,7 +111,7 @@ def test_pick_is_503_when_the_database_is_down(monkeypatch):
     def refuse(*_):
         raise psycopg.OperationalError("connection refused")
 
-    monkeypatch.setattr(main, "pick_film", refuse)
+    monkeypatch.setattr(main, "pick_films", refuse)
 
     no_raise = TestClient(main.app, raise_server_exceptions=False)
     assert no_raise.post("/api/pick", json={"liked": [1]}).status_code == 503
@@ -106,7 +133,7 @@ def test_pick_matches_the_evaluated_score(empty_catalog, liked):
 
     response = client.post("/api/pick", json={"liked": [row + 1 for row in liked]})
 
-    assert response.json()["film"]["movie_id"] == int(scores.argmax()) + 1
+    assert response.json()["picks"][0]["film"]["movie_id"] == int(scores.argmax()) + 1
 
 
 def test_shared_themes_needs_both_sides_to_score_highly():

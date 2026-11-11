@@ -18,7 +18,7 @@ from app import assistant, conversations, limits, mcp_server
 from app.catalog_tools import GENRES, film_cards
 from app.config import settings
 from app.db import vector_extension_version
-from app.recommend import pick_film, search_films
+from app.recommend import pick_films, search_films
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,6 +87,9 @@ class FilmMatch(BaseModel):
 class PickRequest(BaseModel):
     liked: list[int] = Field(min_length=1, max_length=50)
     rejected: list[int] = Field(default_factory=list, max_length=500)
+    count: int = Field(default=3, ge=1, le=5)
+    # Picks still on screen when one is replaced. They're left out, and so are their sequels.
+    showing: list[int] = Field(default_factory=list, max_length=5)
 
 
 class PickedFilm(BaseModel):
@@ -106,9 +109,14 @@ class PickReason(BaseModel):
     themes: list[str]
 
 
-class PickResponse(BaseModel):
+class Pick(BaseModel):
     film: PickedFilm
     reason: PickReason
+
+
+class PickResponse(BaseModel):
+    # Best first. Fewer than asked for when the catalog runs out.
+    picks: list[Pick]
 
 
 class Preferences(BaseModel):
@@ -175,10 +183,10 @@ def search(
 
 @app.post("/api/pick", dependencies=[per_minute])
 def pick(request: PickRequest) -> PickResponse:
-    result = pick_film(request.liked, request.rejected)
-    if result is None:
+    picks = pick_films(request.liked, request.rejected, request.count, request.showing)
+    if not picks:
         raise HTTPException(status_code=404, detail="No film is available to pick.")
-    return result
+    return PickResponse(picks=picks)
 
 
 @app.get("/api/config")

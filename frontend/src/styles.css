@@ -361,6 +361,12 @@ textarea::placeholder {
   margin-top: 1.5rem;
 }
 
+.actions .links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+
 .actions a[target="_blank"]::after {
   content: " ↗" / "";
   font-weight: 400;
@@ -382,21 +388,98 @@ main > .notice.quiet {
   border-top: 1px solid var(--rule);
 }
 
-/* A pick */
+/* Tonight's three picks, numbered like a programme's listings. On wide screens the numbers
+   hang in the margin, under the step numbers. */
 
-.pick {
+.picks {
   margin-top: 3rem;
-  padding-top: 1.4rem;
+  padding-top: 0.9rem;
   border-top: 3px solid var(--ink);
-  animation: arrive 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.picks-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem 1rem;
 }
 
 .kicker {
-  margin: 0 0 0.6rem;
+  margin: 0;
   color: var(--accent);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.14em;
+}
+
+.picks-head button {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.picks-head button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.pick-list {
+  counter-reset: pick;
+}
+
+.pick-list > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  column-gap: 0.75rem;
+  padding: 1.4rem 0 1.6rem;
+  counter-increment: pick;
+}
+
+.pick-list > li + li {
+  border-top: 1px solid var(--rule);
+}
+
+.pick-list > li::before {
+  content: counter(pick);
+  color: var(--accent);
+  font-size: 2rem;
+  font-style: italic;
+  line-height: 1.1;
+}
+
+@media (min-width: 64rem) {
+  .pick-list > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pick-list > li::before {
+    position: absolute;
+    top: 1.4rem;
+    left: -4.5rem;
+  }
+}
+
+.pick {
+  animation: arrive 320ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.pick-list > li:nth-child(2) .pick {
+  animation-delay: 60ms;
+}
+
+.pick-list > li:nth-child(3) .pick {
+  animation-delay: 120ms;
 }
 
 .pick h2,
@@ -407,9 +490,9 @@ main > .notice.quiet {
 }
 
 .pick h2 {
-  font-size: clamp(2.3rem, 9vw, 3.4rem);
-  line-height: 1;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.75rem, 6vw, 2.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
 }
 
 .pick h3 {
@@ -513,7 +596,7 @@ main > .notice.quiet {
 .transcript .pick {
   margin-top: 0.4rem;
   padding: 1rem 0 1.25rem;
-  border-top-width: 1px;
+  border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--rule);
 }
 
@@ -601,7 +684,8 @@ footer {
 
   .primary,
   .actions button,
-  .proposal button {
+  .proposal button,
+  .picks-head button {
     transition: none;
   }
 }

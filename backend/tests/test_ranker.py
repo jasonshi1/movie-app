@@ -119,7 +119,7 @@ def test_pick_matches_the_evaluated_ranker_score(empty_catalog, liked):
     scores[liked] = -np.inf
     response = client.post("/api/pick", json={"liked": [row + 1 for row in liked]})
 
-    assert response.json()["film"]["movie_id"] == int(scores.argmax()) + 1
+    assert response.json()["picks"][0]["film"]["movie_id"] == int(scores.argmax()) + 1
 
 
 def test_pick_uses_the_ranker_instead_of_stage_1_when_one_is_loaded(empty_catalog):
@@ -137,7 +137,7 @@ def test_pick_uses_the_ranker_instead_of_stage_1_when_one_is_loaded(empty_catalo
     genome = np.stack([tagged(t0=1.0)] * 3)
     load_films(empty_catalog, genome, np.array([0.0, 0.9, 0.1]), ranker)
 
-    body = client.post("/api/pick", json={"liked": [1]}).json()
+    best = client.post("/api/pick", json={"liked": [1]}).json()["picks"][0]
 
-    assert body["film"]["movie_id"] == 3
-    assert body["reason"]["similar_to"] == "Film 0"
+    assert best["film"]["movie_id"] == 3
+    assert best["reason"]["similar_to"] == "Film 0"
