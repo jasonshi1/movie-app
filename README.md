@@ -188,17 +188,17 @@ The image built from the root `Dockerfile` serves the app, the API and the MCP s
    (. ./.env.local; fly secrets set DATABASE_URL="$DATABASE_URL" ANTHROPIC_API_KEY="<your key>")
    ```
 
-6. Deploy from the project root. The first build takes a few minutes:
+6. Deploy from the project root. The first build takes a few minutes. `--ha=false` keeps it to one machine: otherwise Fly.io starts two on the first deploy, which doubles the cost and gives each machine its own rate-limit counts:
 
    ```bash
-   fly deploy
+   fly deploy --ha=false
    ```
 
 7. Open https://tonights-pick.fly.dev and try a quick pick and a chat. The MCP server is at https://tonights-pick.fly.dev/mcp.
-8. Check that visitors can't get around the rate limits by claiming another address. This sends 125 searches, each claiming a different one. A few should come back `429`, because Fly.io replaces the header with your real address:
+8. Check that visitors can't get around the rate limits by claiming another address. This sends 125 searches, each claiming a different one. They go 16 at a time so they all land within one minute; one after another they take longer, and the limit resets partway through. At least 5 should come back `429`, because Fly.io replaces the header with your real address:
 
    ```bash
-   for i in $(seq 1 125); do curl -s -o /dev/null -w "%{http_code}\n" -H "Fly-Client-IP: 203.0.113.$i" "https://tonights-pick.fly.dev/api/films/search?q=matrix"; done | sort | uniq -c
+   seq 1 125 | xargs -P 16 -I{} curl -s -o /dev/null -w "%{http_code}\n" -H "Fly-Client-IP: 203.0.113.{}" "https://tonights-pick.fly.dev/api/films/search?q=matrix" | sort | uniq -c
    ```
 
    If all 125 come back `200`, visitors can forge the header. Remove `CLIENT_IP_HEADER` from `fly.toml` and redeploy. Every visitor then shares one set of limits, which is safe but strict, while you look for another way to identify visitors.
