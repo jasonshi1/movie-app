@@ -1,7 +1,9 @@
 import logging
 import math
+import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from os import PathLike
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
@@ -321,6 +323,25 @@ def chat(request: ChatRequest) -> ChatResponse:
     )
 
 
+# Vite names each built script, stylesheet and font in assets/ after a hash of its contents, so
+# a new build gets new names and browsers can keep these files for good. Everything else,
+# index.html above all, is checked with the server on every visit, so a deploy shows at once.
+# Without a Cache-Control header, browsers guess how long to keep index.html and can show an
+# old version, which also loads the old build's files.
+IMMUTABLE = "public, max-age=31536000, immutable"
+REVALIDATE = "no-cache"
+
+
+class FrontendFiles(StaticFiles):
+    def file_response(
+        self, full_path: PathLike, stat_result: os.stat_result, scope: Scope, status_code: int = 200
+    ) -> Response:
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        hashed = Path(self.get_path(scope)).parts[:1] == ("assets",)
+        response.headers["Cache-Control"] = IMMUTABLE if hashed else REVALIDATE
+        return response
+
+
 def serve_frontend(application: FastAPI, directory: Path) -> bool:
     """Serve the built app from the same address as the API, if it has been built.
 
@@ -328,7 +349,7 @@ def serve_frontend(application: FastAPI, directory: Path) -> bool:
     """
     if not (directory / "index.html").is_file():
         return False
-    application.mount("/", StaticFiles(directory=directory, html=True), name="frontend")
+    application.mount("/", FrontendFiles(directory=directory, html=True), name="frontend")
     return True
 
 
