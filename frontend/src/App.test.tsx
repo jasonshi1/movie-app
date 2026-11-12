@@ -372,6 +372,15 @@ it("shows posters beside matching films", async () => {
   expect(container.querySelector(".suggestions img")?.getAttribute("src")).toBe(MATRIX.poster_url);
 });
 
+it("explains how picks are made and links to how the app was built", () => {
+  stubApi([]);
+  render(<App />);
+
+  expect(screen.getByText(/machine-learning model trained on the film ratings/)).toBeTruthy();
+  const overview = screen.getByRole("link", { name: "How Tonight’s Pick was made" });
+  expect(overview.getAttribute("href")).toBe("https://claude.ai/artifact/JFT9yntXLn53UiYnLAVtK4");
+});
+
 it("says who made it", () => {
   stubApi([]);
   render(<App />);
