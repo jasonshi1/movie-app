@@ -204,6 +204,15 @@ h1 em {
   line-height: 1.35;
 }
 
+/* How picks are made, under the lead sentence and smaller. */
+.masthead .how {
+  max-width: 34em;
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
 /* Numbered steps. On wide screens the numbers hang in the margin. */
 
 main {
@@ -844,6 +853,11 @@ footer {
 
 footer p {
   margin: 0;
+}
+
+footer .making-of {
+  margin-top: 0.9rem;
+  color: var(--ink);
 }
 
 /* Set like the credit at the foot of a programme. */

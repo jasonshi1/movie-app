@@ -24,6 +24,8 @@ const PICK_COUNT = 3;
 // October 2023, so it would rarely choose a newer film otherwise.
 const RECENT_PICKS = 1;
 const COUNT_WORDS = ["none", "one", "two", "three", "four", "five"];
+// A page on claude.ai about how the app was built: its stack, timeline and results.
+const OVERVIEW_URL = "https://claude.ai/artifact/JFT9yntXLn53UiYnLAVtK4";
 
 const today = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
@@ -190,8 +192,15 @@ export default function App() {
           Tonight’s <em>Pick</em>
         </h1>
         <p className="intro">
-          Name a few films you love, and get three to choose from tonight, one of them a new
-          release.
+          Name a few films you love, and get up to three to choose from tonight, one of them a
+          new release.
+        </p>
+        <p className="how">
+          Picks come from a machine-learning model trained on the film ratings of more than
+          100,000 MovieLens users. It learned which films the same people tend to love, so it can
+          turn your favourites into a taste profile and score every film in the catalog against
+          it. Films too new to have been rated are matched by what their Wikipedia articles say
+          about them.
         </p>
       </header>
 
@@ -344,6 +353,10 @@ export default function App() {
           Tomatometer scores are from Wikidata and can be a few years old. Free and
           non-commercial. MovieLens ratings end in October 2023, so newer films are
           matched by their descriptions alone.
+        </p>
+        <p className="making-of">
+          <a href={OVERVIEW_URL}>How Tonight&rsquo;s Pick was made</a>: what it&rsquo;s built
+          with, how it was built, and how well it picks.
         </p>
         <p className="byline">Created By: Jason Shi</p>
       </footer>
