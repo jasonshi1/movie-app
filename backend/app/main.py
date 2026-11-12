@@ -115,6 +115,12 @@ class PickedFilm(BaseModel):
     where_to_watch_url: str
     # The lead image of the film's Wikipedia article, nearly always its poster.
     poster_url: str | None
+    # Out of 10, from IMDb's daily ratings file as of the last catalog load.
+    imdb_rating: float | None
+    imdb_url: str | None
+    # The Tomatometer, the percentage of critics' reviews that are positive, from Wikidata.
+    rotten_tomatoes: int | None
+    rotten_tomatoes_url: str | None
 
 
 class PickReason(BaseModel):

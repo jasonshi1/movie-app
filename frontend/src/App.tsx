@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Chat from "./Chat";
 import FilmTitle from "./FilmTitle";
 import Poster from "./Poster";
+import Ratings from "./Ratings";
 import { details, withYear } from "./format";
 import { loadFavourites, loadPreferences, saveFavourites, savePreferences } from "./storage";
 import { useTheme } from "./theme";
@@ -245,7 +246,7 @@ export default function App() {
             disabled={favourites.length === 0 || busy}
             onClick={() => void pickFilms(rejected)}
           >
-            {status === "picking" ? "Choosing…" : "Pick three films"}
+            {status === "picking" ? "Choosing…" : "Pick up to three films"}
           </button>
 
           {status === "none-left" && (
@@ -279,9 +280,12 @@ export default function App() {
                   <article className="pick">
                     <Poster url={pick.film.poster_url} className="poster" />
                     {pick.recent && <p className="flag">New release</p>}
-                    <h2>
-                      <FilmTitle film={pick.film} />
-                    </h2>
+                    <div className="title-line">
+                      <h2>
+                        <FilmTitle film={pick.film} />
+                      </h2>
+                      <Ratings film={pick.film} />
+                    </div>
                     <p className="details">{details(pick.film)}</p>
                     <p className="reason">
                       Closest to <strong>{pick.reason.similar_to}</strong> among your favourites.
@@ -335,7 +339,10 @@ export default function App() {
           <a href="https://en.wikipedia.org/">Wikipedia</a> (CC BY-SA), with popularity from
           Wikipedia page views. Posters are the lead images of each film&rsquo;s Wikipedia
           article; most are copyrighted by their studios and shown here to identify the film.
-          Free and non-commercial. MovieLens ratings end in October 2023, so newer films are
+          IMDb ratings: information courtesy of{" "}
+          <a href="https://www.imdb.com">IMDb</a>, used with permission. Rotten Tomatoes
+          Tomatometer scores are from Wikidata and can be a few years old. Free and
+          non-commercial. MovieLens ratings end in October 2023, so newer films are
           matched by their descriptions alone.
         </p>
         <p className="byline">Created By: Jason Shi</p>

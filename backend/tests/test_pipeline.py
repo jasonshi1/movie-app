@@ -1,3 +1,5 @@
+import gzip
+
 import numpy as np
 import polars as pl
 import pytest
@@ -16,6 +18,7 @@ from pipeline.evaluate import (
     similarity_scorer,
 )
 from pipeline.posters import clean_url, resolve_posters
+from pipeline.review_scores import merge_scores, percent, read_imdb_ratings, review_scores
 
 
 @pytest.mark.parametrize(
@@ -184,3 +187,59 @@ def test_posters_only_come_from_hosts_the_app_allows():
     )
     assert clean_url("http://upload.wikimedia.org/a.png") == ""
     assert clean_url("https://example.com/a.png") == ""
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("83%", 83), ("100%", 100), ("0%", 0), (" 7 % ", 7), ("7.8/10", None), ("101%", None), ("", None)],
+)
+def test_percent_reads_only_percentages(text, expected):
+    assert percent(text) == expected
+
+
+def _binding(imdb, score=None, date=None, page=None):
+    binding = {"imdb": {"value": imdb}}
+    if score is not None:
+        binding["score"] = {"value": score}
+    if date is not None:
+        binding["date"] = {"value": date}
+    if page is not None:
+        binding["id"] = {"value": page}
+    return binding
+
+
+def test_merge_scores_keeps_the_latest_tomatometer_score_and_a_safe_page():
+    bindings = [
+        _binding("tt0133093", "87%", "2021-09-11T00:00:00Z", "m/matrix"),
+        _binding("tt0133093", "83%", "2026-01-16T00:00:00Z", "m/matrix"),
+        _binding("tt0133093", "90%", None, "m/matrix"),
+        _binding("tt8999762", "not a score", "2025-05-03T00:00:00Z", "javascript:alert(1)"),
+    ]
+
+    records = merge_scores(bindings, ["tt0133093", "tt8999762", "tt0000001"])
+
+    assert records["tt0133093"]["score"] == 83
+    assert records["tt0133093"]["id"] == "m/matrix"
+    assert records["tt8999762"] == {"score": None, "date": None, "id": None}
+    assert records["tt0000001"] == {"score": None, "date": None, "id": None}
+
+
+def test_review_scores_matches_imdb_ratings_and_rotten_tomatoes_to_films(tmp_path):
+    ratings = tmp_path / "title.ratings.tsv.gz"
+    with gzip.open(ratings, "wt", encoding="utf-8") as file:
+        for line in (
+            ["tconst", "averageRating", "numVotes"],
+            ["tt0133093", "8.7", "2200000"],
+            ["tt12037194", "7.5", "300000"],
+        ):
+            file.write("\t".join(line) + "\n")
+    films = pl.DataFrame({"movie_id": [2571, 1100361125, 5], "imdb_id": ["0133093", "12037194", "0000005"]})
+    rotten_tomatoes = {"tt0133093": {"score": 83, "date": "2026-01-16", "id": "m/matrix"}}
+
+    scores = review_scores(films, read_imdb_ratings(ratings), rotten_tomatoes)
+
+    assert scores.to_dicts() == [
+        {"movie_id": 2571, "imdb_rating": 8.7, "rotten_tomatoes": 83, "rotten_tomatoes_id": "m/matrix"},
+        {"movie_id": 1100361125, "imdb_rating": 7.5, "rotten_tomatoes": None, "rotten_tomatoes_id": None},
+        {"movie_id": 5, "imdb_rating": None, "rotten_tomatoes": None, "rotten_tomatoes_id": None},
+    ]

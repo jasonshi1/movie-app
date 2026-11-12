@@ -13,6 +13,7 @@ from app.recommend import vector_literal
 from pipeline.catalog import PROCESSED_DIR, film_popularity
 from pipeline.embed import normalize
 from pipeline.posters import load_posters
+from pipeline.review_scores import load_review_scores
 from pipeline.tag_policy import is_displayable
 
 INIT_DIR = Path(__file__).resolve().parents[2] / "db" / "init"
@@ -46,6 +47,21 @@ def load_ranker(movie_ids: np.ndarray) -> dict[str, np.ndarray] | None:
     return ranker
 
 
+def scores_by_film() -> dict[int, tuple]:
+    """Each film's IMDb rating, Rotten Tomatoes score and page, or nothing if
+    pipeline.review_scores hasn't run."""
+    scores = load_review_scores()
+    if scores is None:
+        print("no review scores, so films load without IMDb and Rotten Tomatoes ratings")
+        return {}
+    return {
+        row[0]: row[1:]
+        for row in scores.select(
+            "movie_id", "imdb_rating", "rotten_tomatoes", "rotten_tomatoes_id"
+        ).iter_rows()
+    }
+
+
 def main() -> None:
     films = pl.read_parquet(PROCESSED_DIR / "films.parquet").join(
         pl.read_parquet(PROCESSED_DIR / "enrichment.parquet"), on="movie_id"
@@ -57,6 +73,7 @@ def main() -> None:
     ranker = load_ranker(films["movie_id"].to_numpy())
     # Without pipeline.posters having run, films load without posters.
     posters = load_posters()
+    scores = scores_by_film()
 
     with psycopg.connect(settings.database_url) as conn:
         apply_schema(conn)
@@ -70,7 +87,8 @@ def main() -> None:
             )
             with cursor.copy(
                 "COPY films (movie_id, imdb_id, title, year, genres, directors, cast_members,"
-                " runtime, certification, wikipedia_title, poster_url, description, popularity,"
+                " runtime, certification, wikipedia_title, poster_url, imdb_rating,"
+                " rotten_tomatoes, rotten_tomatoes_id, description, popularity,"
                 " genome, embedding, ranker_input, ranker_output)"
                 " FROM STDIN"
             ) as copy:
@@ -88,6 +106,7 @@ def main() -> None:
                             row["certification"],
                             row["wikipedia_title"],
                             posters.get(row["wikipedia_title"] or "") or None,
+                            *scores.get(row["movie_id"], (None, None, None)),
                             row["description"],
                             float(popularity[index]),
                             vector_literal(genome[index]),

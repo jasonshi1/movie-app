@@ -18,6 +18,12 @@ export type PickedFilm = {
   wikipedia_url: string | null;
   where_to_watch_url: string;
   poster_url: string | null;
+  // Out of 10.
+  imdb_rating: number | null;
+  imdb_url: string | null;
+  // The Tomatometer, in percent.
+  rotten_tomatoes: number | null;
+  rotten_tomatoes_url: string | null;
 };
 
 export type Preferences = {

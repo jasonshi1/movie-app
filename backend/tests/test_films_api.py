@@ -62,6 +62,25 @@ def test_pick_returns_the_closest_film_first_with_a_reason(catalog):
     assert best["reason"]["similar_to"] == "The Matrix"
 
 
+def test_picks_carry_imdb_and_rotten_tomatoes_ratings_with_links(catalog):
+    picks = {
+        pick["film"]["title"]: pick["film"]
+        for pick in client.post("/api/pick", json={"liked": [1]}).json()["picks"]
+    }
+
+    blade_runner = picks["Blade Runner"]
+    assert blade_runner["imdb_rating"] == 8.1
+    assert blade_runner["imdb_url"] == "https://www.imdb.com/title/tt0000002/"
+    assert blade_runner["rotten_tomatoes"] == 89
+    assert blade_runner["rotten_tomatoes_url"] == "https://www.rottentomatoes.com/m/blade_runner"
+    # A film without ratings still links to IMDb, which has a page for every film in the catalog.
+    notting_hill = picks["Notting Hill"]
+    assert notting_hill["imdb_rating"] is None
+    assert notting_hill["rotten_tomatoes"] is None
+    assert notting_hill["rotten_tomatoes_url"] is None
+    assert notting_hill["imdb_url"] == "https://www.imdb.com/title/tt0000003/"
+
+
 def test_pick_returns_three_films_best_first_each_with_a_reason(catalog):
     picks = client.post("/api/pick", json={"liked": [1]}).json()["picks"]
 
