@@ -28,6 +28,10 @@ function reply(overrides: Partial<ChatReply> = {}): ChatReply {
         wikipedia_url: null,
         where_to_watch_url: "https://www.justwatch.com/ca/search?q=Blade%20Runner",
         poster_url: "https://upload.wikimedia.org/wikipedia/en/blade-runner.png",
+        imdb_rating: 8.1,
+        imdb_url: "https://www.imdb.com/title/tt0083658/",
+        rotten_tomatoes: 89,
+        rotten_tomatoes_url: "https://www.rottentomatoes.com/m/blade_runner",
       },
       reason: "Like The Matrix, it questions what's real.",
     },
@@ -71,6 +75,8 @@ it("sends the message with favourites and preferences, then shows Claude's pick"
   expect(pick.querySelector("img")?.getAttribute("src")).toBe(
     "https://upload.wikimedia.org/wikipedia/en/blade-runner.png",
   );
+  expect(screen.getByRole("link", { name: "IMDb rating 8.1 out of 10" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Rotten Tomatoes 89%" })).toBeTruthy();
   expect(bodies[0]).toEqual({
     conversation_id: null,
     message: "Something mind-bending",

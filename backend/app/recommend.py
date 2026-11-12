@@ -47,10 +47,11 @@ RECENT_POPULARITY_WEIGHT = 32.0
 # The columns film_card() reads, in order, from a query that aliases films as "film".
 FILM_CARD_COLUMNS = (
     "film.movie_id, film.title, film.year, film.genres, film.directors, film.runtime,"
-    " film.certification, film.wikipedia_title, film.poster_url"
+    " film.certification, film.wikipedia_title, film.poster_url, film.imdb_id,"
+    " film.imdb_rating, film.rotten_tomatoes, film.rotten_tomatoes_id"
 )
 # Where the columns a query selects after FILM_CARD_COLUMNS start.
-CARD_WIDTH = 9
+CARD_WIDTH = 13
 
 _SEARCH = """
 SELECT movie_id, title, year, directors, poster_url
@@ -160,9 +161,21 @@ def shared_themes(taste: list[float], film: list[float], tags: list[tuple[int, s
 
 def film_card(row: tuple) -> dict:
     """Describe a film for display, from a row starting with FILM_CARD_COLUMNS."""
-    movie_id, title, year, genres, directors, runtime, certification, wikipedia_title, poster_url = (
-        row[:CARD_WIDTH]
-    )
+    (
+        movie_id,
+        title,
+        year,
+        genres,
+        directors,
+        runtime,
+        certification,
+        wikipedia_title,
+        poster_url,
+        imdb_id,
+        imdb_rating,
+        rotten_tomatoes,
+        rotten_tomatoes_id,
+    ) = row[:CARD_WIDTH]
     return {
         "movie_id": movie_id,
         "title": title,
@@ -178,6 +191,13 @@ def film_card(row: tuple) -> dict:
         ),
         "where_to_watch_url": f"https://www.justwatch.com/ca/search?q={quote(title)}",
         "poster_url": poster_url,
+        # Stored as a real, so 8.7 would come back as 8.699999809.
+        "imdb_rating": round(imdb_rating, 1) if imdb_rating is not None else None,
+        "imdb_url": f"https://www.imdb.com/title/tt{imdb_id}/" if imdb_id else None,
+        "rotten_tomatoes": rotten_tomatoes,
+        "rotten_tomatoes_url": (
+            f"https://www.rottentomatoes.com/{rotten_tomatoes_id}" if rotten_tomatoes_id else None
+        ),
     }
 
 

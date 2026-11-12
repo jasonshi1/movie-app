@@ -22,6 +22,28 @@ function posterFor(movieId: number) {
   return `https://thumb.wikimedia.org/wikipedia/en/${movieId}.jpg`;
 }
 
+// Blade Runner has both scores, each with its page. Gattaca's made-up score is rotten and has no
+// page to link to. Anything else has no scores at all.
+function ratingsFor(movieId: number) {
+  if (movieId === 2) {
+    return {
+      imdb_rating: 8.1,
+      imdb_url: "https://www.imdb.com/title/tt0083658/",
+      rotten_tomatoes: 89,
+      rotten_tomatoes_url: "https://www.rottentomatoes.com/m/blade_runner",
+    };
+  }
+  if (movieId === 3) {
+    return {
+      imdb_rating: 7.8,
+      imdb_url: "https://www.imdb.com/title/tt0119177/",
+      rotten_tomatoes: 42,
+      rotten_tomatoes_url: null,
+    };
+  }
+  return { imdb_rating: null, imdb_url: null, rotten_tomatoes: null, rotten_tomatoes_url: null };
+}
+
 function pickOf(movieId: number, title: string, recent = false) {
   return {
     film: {
@@ -35,6 +57,7 @@ function pickOf(movieId: number, title: string, recent = false) {
       wikipedia_url: "https://en.wikipedia.org/wiki/Blade_Runner",
       where_to_watch_url: "https://www.justwatch.com/ca/search?q=Blade%20Runner",
       poster_url: movieId === 3 ? null : posterFor(movieId),
+      ...ratingsFor(movieId),
     },
     reason: { similar_to: "The Matrix", themes: ["dystopia", "cyberpunk"] },
     recent,
@@ -85,7 +108,7 @@ async function addMatrixAsFavourite() {
 }
 
 function pickButton() {
-  return screen.getByRole("button", { name: "Pick three films" });
+  return screen.getByRole("button", { name: "Pick up to three films" });
 }
 
 function titles() {
@@ -315,6 +338,28 @@ it("drops a poster that fails to load", async () => {
   fireEvent.error(container.querySelector(".pick-list img")!);
 
   expect(container.querySelectorAll(".pick-list img")).toHaveLength(1);
+});
+
+it("shows IMDb and Rotten Tomatoes scores beside each pick's title", async () => {
+  stubApi([{ status: 200, body: THREE }]);
+  const { container } = render(<App />);
+  await addMatrixAsFavourite();
+  fireEvent.click(pickButton());
+  await screen.findByRole("heading", { name: "Blade Runner (1982)" });
+
+  const imdb = screen.getByRole("link", { name: "IMDb rating 8.1 out of 10" });
+  expect(imdb.getAttribute("href")).toBe("https://www.imdb.com/title/tt0083658/");
+  expect(imdb.getAttribute("target")).toBe("_blank");
+  const tomatometer = screen.getByRole("link", { name: "Rotten Tomatoes 89%" });
+  expect(tomatometer.getAttribute("href")).toBe("https://www.rottentomatoes.com/m/blade_runner");
+  expect(tomatometer.querySelector(".tomato")).toBeTruthy();
+
+  // A score without a page still shows, unlinked, and a rotten one gets a splat.
+  const [, gattaca, dune] = container.querySelectorAll(".pick-list .pick");
+  expect(gattaca.querySelector(".ratings")?.textContent).toBe("IMDbIMDb rating 7.8 out of 10Rotten Tomatoes 42%");
+  expect(gattaca.querySelectorAll(".ratings a")).toHaveLength(1);
+  expect(gattaca.querySelector(".splat")).toBeTruthy();
+  expect(dune.querySelector(".ratings")).toBeNull();
 });
 
 it("shows posters beside matching films", async () => {

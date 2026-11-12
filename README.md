@@ -71,7 +71,7 @@ A ranking model built with PyTorch turns your favourites into a taste vector, wi
 
 The model is trained in PyTorch on a GPU. The app runs it with numpy and pgvector, so the server needs neither PyTorch nor a GPU. The reason shown with a pick still comes from Tag Genome themes, because people can read those.
 
-Quick picks show three films. The first two are the model's best, and the third, marked "New release", is the best match from the catalog's last three years (see [The new-release pick](#the-new-release-pick)). Each skips any film from the same series as one already shown or one of the last 20 turned down. So a fan of *Toy Story* doesn't get three Star Wars films, and turning down *Star Wars IV* doesn't bring back *Star Wars VI*. Turning down a new release brings another one. Until something is turned down, the first pick is always the model's best film, so the results below apply to it. The simulated users further down go through the model's list one film at a time, so they don't measure the series rule or the new-release pick. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
+Quick picks show up to three films, each with its IMDb rating and Rotten Tomatoes score beside the title when they're known (see [Ratings](#ratings)). The first two are the model's best, and the third, marked "New release", is the best match from the catalog's last three years (see [The new-release pick](#the-new-release-pick)). Each skips any film from the same series as one already shown or one of the last 20 turned down. So a fan of *Toy Story* doesn't get three Star Wars films, and turning down *Star Wars IV* doesn't bring back *Star Wars VI*. Turning down a new release brings another one. Until something is turned down, the first pick is always the model's best film, so the results below apply to it. The simulated users further down go through the model's list one film at a time, so they don't measure the series rule or the new-release pick. Two films count as one series when one title starts the other (*Shrek*, *Shrek 2*), their titles share the first two words (*Star Wars: Episode IV* and *V*), or their Tag Genome themes are at least 0.92 similar. Sequels measured 0.82 to 0.98, and different films rarely pass 0.90.
 
 Each test user's first 20 liked films are the possible favourites, and everything they rated afterwards is hidden. The model trained on 106,781 users and stopped early based on 5,000 other training users. The results below are for 5,000 validation users who played no part in training or choosing the method, at 5 favourites, ranking all 13,248 films:
 
@@ -141,11 +141,21 @@ To add films released since the last run, from `backend`:
 ```bash
 .venv/Scripts/python -m pipeline.expand
 .venv/Scripts/python -m pipeline.posters
+.venv/Scripts/python -m pipeline.review_scores
 .venv/Scripts/python -m pipeline.ranker
 .venv/Scripts/python -m pipeline.recent_pick
 ```
 
-`pipeline.posters` finds each new film's poster. The last step checks the new-release pick again and says if its weight in `app/recommend.py` should change. Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
+`pipeline.posters` finds each new film's poster, and `pipeline.review_scores` fetches every film's IMDb rating and Rotten Tomatoes score again, since both change. The last step checks the new-release pick again and says if its weight in `app/recommend.py` should change. Then load the catalog as in step 2 of [Launch on Fly.io and Neon](#launch-on-flyio-and-neon). The site reads the database directly, so it needs no redeploy. Apart from the ratings, Wikidata and Wikipedia results are cached in `data/processed`, so a refresh only asks for what's new, and each film keeps its ID, so favourites saved in browsers stay valid.
+
+## Ratings
+
+Each pick shows its IMDb rating out of 10 and its Rotten Tomatoes Tomatometer, the share of critics' reviews that are positive, with a tomato when the film is fresh (60% or more) and a splat when it's rotten. Each links to the film's page on that site. They're only shown, never used to choose films.
+
+- **IMDb ratings** come from [IMDb's daily ratings file](https://developer.imdb.com/non-commercial-datasets/), offered for personal and non-commercial use. Every film in the catalog but 32 has one.
+- **Rotten Tomatoes** doesn't publish its scores, so they come from Wikidata, where editors record a film's Tomatometer with the date it was read; the latest is used. 87% of films have one, but only 57% of films from 2024 on, and a score can be a few years old.
+
+`pipeline.review_scores` fetches both again each time it runs. They reach the site when the catalog is next loaded.
 
 ## Simulated users
 
@@ -277,6 +287,7 @@ This is a free, non-commercial project.
 
 - [MovieLens 32M](https://grouplens.org/datasets/movielens/32m/) and the [Tag Genome 2021](https://grouplens.org/datasets/movielens/tag-genome-2021/) by GroupLens. Harper and Konstan (2015), The MovieLens Datasets: History and Context, ACM TiiS 5(4). Kotkov et al. (2021), Revisiting the tag relevance prediction problem, SIGIR. Vig et al. (2012), The tag genome, ACM TiiS 2(3). The Tag Genome is licensed under CC BY-NC 3.0.
 - [Wikidata](https://www.wikidata.org/) (CC0) and [Wikipedia](https://en.wikipedia.org/) (CC BY-SA), with page views from the [Wikimedia pageviews API](https://wikitech.wikimedia.org/wiki/Analytics/AQS/Pageviews) (CC0).
+- IMDb ratings: information courtesy of IMDb (https://www.imdb.com). Used with permission. Rotten Tomatoes scores come from Wikidata.
 - Posters are the lead image of each film's English Wikipedia article, found by `pipeline.posters` for 98% of films and loaded from Wikimedia's servers. Most are copyrighted by their studios and used on Wikipedia under fair use; the app shows them small, beside the title, to identify the film, and credits Wikipedia. Old films' posters are often in the public domain. Visitors' browsers fetch them from Wikimedia directly, without sending which page they came from.
 
 GroupLens and the University of Minnesota do not endorse this project.

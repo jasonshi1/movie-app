@@ -4,7 +4,7 @@ The ranking model is trained separately with pipeline.ranker, between expand and
 because it needs PyTorch.
 """
 
-from pipeline import catalog, download, embed, enrich, expand, load_db, posters
+from pipeline import catalog, download, embed, enrich, expand, load_db, posters, review_scores
 
 
 def main() -> None:
@@ -14,6 +14,7 @@ def main() -> None:
     embed.main()
     expand.main()
     posters.main()
+    review_scores.main()
     load_db.main()
 
 
